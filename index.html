@@ -732,6 +732,8 @@ Open: confirm 10 in casing with geotech."></textarea>
         <span><input type="checkbox" id="v3d_pile_s" checked> <label for="v3d_pile_s" style="margin:0;display:inline;">Micropiles</label></span>
         <span><input type="checkbox" id="v3d_ped" checked> <label for="v3d_ped" style="margin:0;display:inline;">Pedestals</label></span>
         <span><input type="checkbox" id="v3d_col" checked> <label for="v3d_col" style="margin:0;display:inline;">Canopy columns</label></span>
+        <span><input type="checkbox" id="v3d_ramp" checked> <label for="v3d_ramp" style="margin:0;display:inline;">Ramps &amp; stairs</label></span>
+        <span><input type="checkbox" id="v3d_rwall" checked> <label for="v3d_rwall" style="margin:0;display:inline;">Ramp &amp; stair walls</label></span>
         <span><input type="checkbox" id="v3d_rail" checked> <label for="v3d_rail" style="margin:0;display:inline;">Track</label></span>
         <span><input type="checkbox" id="v3d_grnd" checked> <label for="v3d_grnd" style="margin:0;display:inline;">Ground</label></span>
         <span><input type="checkbox" id="v3d_lab" checked> <label for="v3d_lab" style="margin:0;display:inline;">Support labels</label></span>
@@ -1995,7 +1997,8 @@ function drawFramePlan(){
 const CAM={az:34, el:24, zoom:1, dragging:false};
 const COL3={ plat:[168,196,198], panel:[136,166,169], beam:[64,68,74], cap:[150,146,136],
              pile:[156,72,44], rail:[62,74,85], ped:[132,128,118],
-             ground:[176,166,140], tact:[186,112,80], col:[92,98,106] };
+             ground:[176,166,140], tact:[186,112,80], col:[92,98,106],
+             ramp:[204,198,184], stair:[120,128,138], rwall:[172,166,154], rftg:[140,136,126] };
 
 function draw3D(){
   const svg=document.getElementById('svg_3d'); if(!svg||!ENG) return;
@@ -2070,7 +2073,11 @@ function draw3D(){
 
   // ---- proposed grade ----
   if(gb('v3d_grnd') && gpts.length){
-    const far=Math.max(C.W, C.ped?(ENG.pedOffAt((s0+s1)/2)+Math.max(C.pedW,C.pcW)/2):0)+6;
+    // carry the ground back far enough to sit under any ramp or stair behind the platform
+    let back=0; if(CHAINS.length) CHAINS.forEach(ch=>{ try{ const R=computeChain(ch);
+      if(R.sta==null) return; const P0=ENG.platPt(R.sta,C.W,0), P1=ENG.platPt(R.sta,C.W+1,0), ux=P1.x-P0.x, uy=P1.y-P0.y;
+      R.foot.forEach(f=>f.p.forEach(q=>{ back=Math.max(back, C.W+(q.x-P0.x)*ux+(q.y-P0.y)*uy); })); }catch(e){} });
+    const far=Math.max(C.W, back, C.ped?(ENG.pedOffAt((s0+s1)/2)+Math.max(C.pedW,C.pcW)/2):0)+6;
     sweep(span(NS), st=>{ const g0=gradeAt(st), near=-(C.gauge/2+8)-ENG.edgeOff(st);
       return [{w:near,z:g0},{w:far,z:g0},{w:far,z:g0-0.6},{w:near,z:g0-0.6}]; }, COL3.ground, true, gn('v3d_gop')/100);
   }
@@ -2108,6 +2115,46 @@ function draw3D(){
       (b.pedPiles||[]).forEach(pl=>{ const zb=b.pcBot-pileShow;
         if(zb<pl.cut-0.05) vprism(pl.pt, pl.dia/2, pl.cut, zb, fast?6:10, COL3.pile); });
     }
+  });
+
+  // ---- ramps, stairs and their walls ----
+  // A box between two plan points, of a given width, whose top and bottom can vary
+  // linearly from one end to the other.
+  function slab(a,b,wd,zt1,zt2,zb1,zb2,col){
+    let ux=b.x-a.x, uy=b.y-a.y; const m=Math.hypot(ux,uy); if(m<1e-6) return; ux/=m; uy/=m;
+    const nx=-uy*wd/2, ny=ux*wd/2;
+    const T=[{x:a.x+nx,y:a.y+ny,z:zt1},{x:b.x+nx,y:b.y+ny,z:zt2},{x:b.x-nx,y:b.y-ny,z:zt2},{x:a.x-nx,y:a.y-ny,z:zt1}];
+    const Bt=[{x:a.x+nx,y:a.y+ny,z:zb1},{x:b.x+nx,y:b.y+ny,z:zb2},{x:b.x-nx,y:b.y-ny,z:zb2},{x:a.x-nx,y:a.y-ny,z:zb1}];
+    faces.push({p:T,col});
+    for(let i=0;i<4;i++){ const j=(i+1)%4; faces.push({p:[T[i],T[j],Bt[j],Bt[i]],col}); }
+  }
+  if((gb('v3d_ramp')||gb('v3d_rwall')) && CHAINS.length) CHAINS.forEach(ch=>{
+    let R; try{ R=computeChain(ch); }catch(e){ return; }
+    if(!R || R.sta==null || R.sta<s0-80 || R.sta>s1+80) return;
+    if(gb('v3d_ramp')) R.foot.forEach(f=>{
+      if(f.z1==null) return;
+      const P=f.p, a={x:(P[0].x+P[3].x)/2,y:(P[0].y+P[3].y)/2}, b={x:(P[1].x+P[2].x)/2,y:(P[1].y+P[2].y)/2};
+      const wd=Math.hypot(P[0].x-P[3].x,P[0].y-P[3].y);
+      if(f.kind!=='stair'){ slab(a,b,wd,f.z1,f.z2,f.z1-0.67,f.z2-0.67,COL3.ramp); return; }
+      // stair: one tread per step, open below, on two stringers
+      const g=R.segs.find(q=>q.i===f.seg); if(!g) return;
+      const nT=g.treadsN, sk=(g.treadsN===g.n?0:1), L=Math.hypot(b.x-a.x,b.y-a.y); if(L<1e-6) return;
+      const ux=(b.x-a.x)/L, uy=(b.y-a.y)/L;
+      for(let k=0;k<nT;k++){ const zt=f.z1-(k+sk)*g.riser;
+        slab({x:a.x+ux*k*g.td,y:a.y+uy*k*g.td},{x:a.x+ux*(k+1)*g.td,y:a.y+uy*(k+1)*g.td},wd,zt,zt,zt-0.12,zt-0.12,COL3.stair); }
+      [1,-1].forEach(sd=>{ const o=sd*(wd/2-0.1), px=-uy*o, py=ux*o;
+        slab({x:a.x+px,y:a.y+py},{x:b.x+px,y:b.y+py},0.2,f.z1-sk*g.riser,f.z2,f.z1-sk*g.riser-1,f.z2-1,COL3.stair); });
+    });
+    if(gb('v3d_rwall')) (R.walls||[]).forEach(wl=>{
+      const Q=wl.pts, Wd=R.WALL;
+      for(let j=0;j<Q.length-1;j++){ const a=Q[j], b=Q[j+1];
+        if(Math.abs(b.t-a.t)<1e-4) continue;                     // a step in the top: the end faces show it
+        const fa=a.ftgTop!=null?a.ftgTop:a.top-3, fb=b.ftgTop!=null?b.ftgTop:b.top-3;
+        slab(a,b,Wd.t,a.top,b.top,fa,fb,COL3.rwall);
+        if(a.ftgBot!=null&&b.ftgBot!=null) slab(a,b,Wd.fw,a.ftgTop,b.ftgTop,a.ftgBot,b.ftgBot,COL3.rftg);
+      }
+    });
+    if(gb('v3d_lab') && R.pts.length) labels3.push({p:{x:R.pts[0].x,y:R.pts[0].y,z:R.z0+2.5}, t:ch.name||''});
   });
 
   // ---- track ----
@@ -2174,7 +2221,7 @@ function bind3D(){
   ['v3d_az','v3d_el','v3d_zoom'].forEach(id=>document.getElementById(id).addEventListener('input',()=>{
     CAM.az=+g('v3d_az'); CAM.el=+g('v3d_el'); CAM.zoom=(+g('v3d_zoom'))/100; draw3D(); }));
   ['v3d_pile','v3d_vx','v3d_w0','v3d_w1','v3d_gop','v3d_plat','v3d_tact','v3d_beam','v3d_cap',
-   'v3d_pile_s','v3d_ped','v3d_col','v3d_rail','v3d_grnd','v3d_lab','v3d_edge']
+   'v3d_pile_s','v3d_ped','v3d_col','v3d_ramp','v3d_rwall','v3d_rail','v3d_grnd','v3d_lab','v3d_edge']
     .forEach(id=>document.getElementById(id).addEventListener('input',draw3D));
   document.getElementById('v3d_reset').onclick=()=>{ CAM.az=34; CAM.el=24; CAM.zoom=1; sync(); draw3D(); };
   let lx=0,ly=0;
@@ -2246,8 +2293,9 @@ function computeChain(ch){
   const pts=[{label: anchor==='back'?'Top — back edge of platform':'Top — end of platform', x, y, z, dist, kind:'top'}];
   const foot=[], checks=[], segOut=[];
   const grade = String(ch.grade).trim()==='' ? C.grade0 : parseFloat(ch.grade);
+  let fz1=null, fz2=null, fseg=-1;                // elevations at the start and end of the footprint being drawn
   const box=(x1,y1,x2,y2,h2,w2,kind)=>{ const nx=Math.sin(h2+Math.PI/2)*w2/2, ny=Math.cos(h2+Math.PI/2)*w2/2;
-    foot.push({kind, p:[{x:x1+nx,y:y1+ny},{x:x2+nx,y:y2+ny},{x:x2-nx,y:y2-ny},{x:x1-nx,y:y1-ny}]}); };
+    foot.push({kind, z1:fz1, z2:fz2, seg:fseg, p:[{x:x1+nx,y:y1+ny},{x:x2+nx,y:y2+ny},{x:x2-nx,y:y2-ny},{x:x1-nx,y:y1-ny}]}); };
   let runNo=0, stairNo=0, landNo=0, lastLand=null;
   // Walls: 14" C.I.P. walls either side of the ramp, top a curb height above the
   // adjacent walking surface, centred on a strip footing set below frost.
@@ -2320,6 +2368,7 @@ function computeChain(ch){
   (ch.segs||[]).forEach((g,i)=>{
     const z1=z, d1=dist, x1=x, y1=y;
     let r={i, k:g.k, z1, dist1:d1};
+    fseg=i; fz1=z1; fz2=z1;
     if(g.k==='land'){
       const L=Math.max(0,+g.L||0);
       x+=Math.sin(h)*L; y+=Math.cos(h)*L; dist+=L; landNo++;
@@ -2333,7 +2382,7 @@ function computeChain(ch){
       const L=Math.max(0,+g.L||0), ratio=Math.max(1,+g.ratio||12);
       const dz=L/ratio;
       x+=Math.sin(h)*L; y+=Math.cos(h)*L; dist+=L; z-=dz; runNo++;
-      box(x1,y1,x,y,h,W,'run');
+      fz2=z; box(x1,y1,x,y,h,W,'run');
       sideWalls(i,'Ramp run '+runNo,x1,y1,x,y,z1,z,d1,dist);
       r.L=L; r.ratio=ratio; r.dz=dz; r.pct=100/ratio; r.label='Ramp run '+runNo;
       checks.push({seg:i, name:`Run ${runNo} running slope`, ok:ratio>=CHAIN_LIM.rampMax-1e-9,
@@ -2347,7 +2396,7 @@ function computeChain(ch){
         // the turning landing spans both runs, so widen the landing that led into the turn
         if(lastLand && Math.abs(lastLand.x2-x1)<1e-6 && Math.abs(lastLand.y2-y1)<1e-6){
           const ox2=Math.sin(h+sg*Math.PI/2)*sh/2, oy2=Math.cos(h+sg*Math.PI/2)*sh/2;
-          foot.pop();
+          const lf=foot.pop(); fz1=fz2=z; fseg=lf.seg;
           box(lastLand.x1+ox2,lastLand.y1+oy2,lastLand.x2+ox2,lastLand.y2+oy2,h,W+sh,'land');
         }
         path.push({x,y});
@@ -2378,7 +2427,7 @@ function computeChain(ch){
       }
       const L=treadsN*td, dz=n*riser;
       x+=Math.sin(h)*L; y+=Math.cos(h)*L; dist+=L; z-=dz; stairNo++;
-      box(x1,y1,x,y,h,W,'stair');
+      fz2=z; box(x1,y1,x,y,h,W,'stair');
       r.n=n; r.treadsN=treadsN; r.td=td; r.riser=riser; r.solved=solved; r.L=L; r.dz=dz; r.label='Stair flight'+(stairNo>1?' '+stairNo:'');
       checks.push({seg:i, name:'Riser height', ok:riser<=CHAIN_LIM.riserMax+1e-6 && riser>=CHAIN_LIM.riserMin-1e-6,
         msg:`${(riser*12).toFixed(2)}" ${solved?'(solved to reach grade) ':''}against 4"–7" — ${n} risers over ${(dz*12).toFixed(2)}"`});
@@ -3913,7 +3962,7 @@ const FIELDS=['hm_metric','hm_nx','hm_ny','hm_ci','notes_txt','calc_dec','t_staf
   'lim_xs','lim_run','lim_vgap','lim_hgap','lim_vmin','lim_vmax','lim_cant','o_int','o_dec','o_extra','val_in',
   'b_first','b_last','b_count','b_cantA','b_cantB','plan_rot'];
 const CHECKS=['hm_sup','hm_beam','hm_ext','p_widen','s_ped','s_pile','o_coords','o_beams','b_normal','sec_dims','sec_dims2','sec_dims3',
-  'v3d_plat','v3d_tact','v3d_beam','v3d_cap','v3d_pile_s','v3d_ped','v3d_col','v3d_rail','v3d_grnd','v3d_lab','v3d_edge'];
+  'v3d_plat','v3d_tact','v3d_beam','v3d_cap','v3d_pile_s','v3d_ped','v3d_col','v3d_ramp','v3d_rwall','v3d_rail','v3d_grnd','v3d_lab','v3d_edge'];
 let CURNAME=null;
 
 function serialize(){

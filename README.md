@@ -160,7 +160,7 @@ All drawings are true scale with pan/zoom.
 
 - **Sections** (typical, at any station, through a support) with dimension chains, leaders and elevation callouts modelled on the HDR typical section. Labels are placed by a collision-avoiding pass with priority (dimensions → elevations → notes). Sections mirror for a left-side platform. A Dimensions toggle turns annotation off.
 - **Framing plan**: platform, cap beams or footings, beam lines, micropiles, pedestal pile caps, cantilever callouts at both ends.
-- **3D**: painter's-algorithm renderer, no external library. Layers for platform, tactile strip, beams (true wide flanges), cap beams/footings, micropiles, pedestals, canopy columns, track, ground (interpolated from per-support grades, adjustable opacity), and support labels. Station window, vertical exaggeration, pile stub length.
+- **3D**: painter's-algorithm renderer, no external library. Layers for platform, tactile strip, beams (true wide flanges), cap beams/footings, micropiles, pedestals, canopy columns, ramps and stairs, ramp and stair walls with footings, track, ground (interpolated from per-support grades, adjustable opacity), and support labels. Station window, vertical exaggeration, pile stub length.
 
 ### Ramps & Stairs
 Each ramp or stair is a **chain** of segments that starts where it ties into the platform and works downhill:
@@ -184,7 +184,7 @@ Each ramp or stair is a **chain** of segments that starts where it ties into the
 
 **Outputs** — walls in plan with footing outlines; a developed true-scale elevation of any wall (top of wall, walking surface or platform, grade, top and bottom of footing, height at every break); a summary table and a per-wall table with centreline coordinates. Checks flag a wall top less than the curb above grade, a footing with less than frost cover, and a footing bottom sloping more than 10%.
 
-Ramps, stairs and walls are not yet in the framing plan, 3D view, heat map or Calculations tab. They save with the platform (Library / Export JSON).
+Ramps, stairs and walls show in the 3D view (layers *Ramps & stairs* and *Ramp & stair walls*: ramp slabs, stair treads on stringers, walls with their level pads, and footings). They are not yet in the framing plan, heat map or Calculations tab. They save with the platform (Library / Export JSON).
 
 ### Heat map
 The platform surface unrolled along the track (station across, distance back from the edge down), coloured by one of:
