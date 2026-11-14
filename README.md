@@ -2,7 +2,7 @@
 
 A single-file, offline HTML tool for laying out high-level rail station platforms. It computes top-of-platform elevations along the platform from the top-of-rail profile, then works down through the supporting structure to report every elevation needed to build it: beam seats, bearing plates, cap or pier wall tops, micropile cutoffs, pedestal and footing elevations.
 
-Open `Platform_Geometry.html` in any modern browser. No install, no server. Everything except KaTeX typesetting in the Calculations tab works offline.
+Open `index.html` in any modern browser, or use the hosted copy at https://mlococo88.github.io/Waterbury_Stations/. No install, no server. Everything except KaTeX typesetting in the Calculations tab works offline.
 
 The tool was developed for the Waterbury line stations (Beacon Falls and Derby are the worked examples), starting from parts of an earlier `Bridge_Geometry.html` tool.
 
