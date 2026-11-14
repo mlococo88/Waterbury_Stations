@@ -2201,10 +2201,10 @@ const CHAIN_LIM={ rampMax:12, riseMax:2.5, landMin:5, widthMin:3, riserMax:7/12,
 function newChain(kind){
   const C=ENG?ENG.C:readCfg(), s=(Math.min(C.sta0,C.sta1)+Math.max(C.sta0,C.sta1))/2;
   if(kind==='stair') return { name:'Stair '+(CHAINS.length+1), sta:+s.toFixed(2), dir:'away', skew:0,
-    width:5, wall:1, gap:0, grade:'',
+    width:5, wall:14/12, gap:0, grade:'', walls:true, wallBelow:1.125, wallLen:'', wallOff:'', wallGrade:'', ftgW:3, ftgT:1.5, frost:3.5,
     segs:[ {k:'land',L:4,plan:''}, {k:'stair',n:7,tread:11,treads:'',riser:'',plan:''} ] };
   return { name:'Ramp '+(CHAINS.length+1), sta:+s.toFixed(2), dir:'north', skew:0,
-    width:5, wall:14/12, gap:0, grade:'', walls:true, curbIn:8, ftgW:3.5, ftgT:1.5, frost:3.5, gradeTop:'',
+    width:5, wall:14/12, gap:0, grade:'', walls:true, curbIn:8, ftgW:3, ftgT:1.5, frost:3.5, gradeTop:'', ftgMode:'level', ftgBot:'', botWall:true,
     segs:[ {k:'land',L:6.1667,plan:''}, {k:'run',L:29,ratio:12.21,plan:''},
            {k:'land',L:5,plan:''}, {k:'turn',deg:180,side:'out',plan:''},
            {k:'run',L:29,ratio:12.21,plan:''} ] };
@@ -2240,6 +2240,7 @@ function computeChain(ch){
     x=e.x+Math.sin(h)*gap; y=e.y+Math.cos(h)*gap;
   }
   h+=skew;
+  const heading0=h;
   let z=z0, dist=0;
   const path=[{x,y}];
   const pts=[{label: anchor==='back'?'Top — back edge of platform':'Top — end of platform', x, y, z, dist, kind:'top'}];
@@ -2251,15 +2252,21 @@ function computeChain(ch){
   // Walls: 14" C.I.P. walls either side of the ramp, top a curb height above the
   // adjacent walking surface, centred on a strip footing set below frost.
   const WALL = { on: ch.walls!==false, t: (+ch.wall>0?+ch.wall:14/12), curb: (ch.curbIn==null||ch.curbIn===''?8:+ch.curbIn)/12,
-                 fw: (+ch.ftgW>0?+ch.ftgW:3.5), ft: (+ch.ftgT>0?+ch.ftgT:1.5), frost: (+ch.frost>0?+ch.frost:3.5) };
+                 fw: (+ch.ftgW>0?+ch.ftgW:3), ft: (+ch.ftgT>0?+ch.ftgT:1.5), frost: (+ch.frost>0?+ch.frost:3.5),
+                 level: ch.ftgMode==='level', bofFix:null };
   const pieces=[];
   const addPiece=(ax,ay,bx,by,ta,tb,da,db,src)=>{ if(Math.hypot(bx-ax,by-ay)>0.01) pieces.push({ax,ay,bx,by,ta,tb,da,db,src}); };
   const nrm=(hh)=>({x:Math.sin(hh+Math.PI/2), y:Math.cos(hh+Math.PI/2)});   // right of heading
   const faceOut=(v)=> v.x*Math.sin(outward)+v.y*Math.cos(outward);          // >0 points away from the track
+  const sideName=(v)=>{ const fo=faceOut(v); if(Math.abs(fo)>0.5) return fo>0?'away side':'track side';
+    return (v.x*Math.sin(brg)+v.y*Math.cos(brg))>0?'up-station side':'down-station side'; };
   // which way "out" is relative to the current heading, so a 180 turn swings away from the platform
   const sideSign=(side)=>{ const right=h+Math.PI/2;
     const dotOut=Math.sin(right)*Math.sin(outward)+Math.cos(right)*Math.cos(outward);
     const rightIsOut = dotOut>=0;
+    if(side==='north'||side==='south'){                 // a 90° turn to head up- or down-station
+      const tgt = side==='north' ? brg : brg+Math.PI;
+      return Math.cos(h+Math.PI/2-tgt) >= 0 ? 1 : -1; }
     return (side==='out') === rightIsOut ? 1 : -1; };
 
   const sideWalls=(i,lab,x1,y1,x2,y2,z1,z2,d1,d2)=>{
@@ -2269,14 +2276,33 @@ function computeChain(ch){
     const turnLand = nxt && nxt.k==='turn' && (+nxt.deg||180)>=179;
     // the side the run beside it will sit on, after a 180 turn
     let sg2=0; if(turnLand) sg2=sideSign(nxt.side||'out');
+    // a landing that ends in a 90° turn: its last width is the corner, so the wall on the
+    // turn side stops where the new run's wall picks up, and a wall closes the far end
+    const turn90 = nxt && nxt.k==='turn' && (+nxt.deg||180)<179;
+    const sg9 = turn90 ? sideSign(nxt.side||'out') : 0;
+    const segL=Math.hypot(x2-x1,y2-y1);
     [1,-1].forEach(sd=>{
       const v={x:n.x*sd, y:n.y*sd};
       // the top landing is entered from the platform, so that side stays open
       if(i===0 && anchor==='back' && along && faceOut(v)<0) return;
-      let off=o;
+      let off=o, ex=x2, ey=y2, ez=z2, ed=d2;
       if(turnLand && sd===sg2) off=(W+WALL.t)+o;     // far side of the turning landing
-      addPiece(x1+v.x*off,y1+v.y*off,x2+v.x*off,y2+v.y*off,z1+c,z2+c,d1,d2,lab+(sd*faceOut(n)>0?' \u00b7 away side':' \u00b7 track side'));
+      if(turn90 && sd===sg9){                         // stop at the corner
+        const keep=Math.max(0, segL-W-WALL.t/2), f=segL>0?keep/segL:0;
+        ex=x1+(x2-x1)*f; ey=y1+(y2-y1)*f; ez=z1+(z2-z1)*f; ed=d1+(d2-d1)*f; }
+      addPiece(x1+v.x*off,y1+v.y*off,ex+v.x*off,ey+v.y*off,z1+c,ez+c,d1,ed,lab+' \u00b7 '+sideName(v));
     });
+    if(turn90){
+      // wall across the far end of the corner; it lines up with the next run's outside wall
+      const e={x:x2+Math.sin(h)*WALL.t/2, y:y2+Math.cos(h)*WALL.t/2}, lo=-(W/2+WALL.t), hi=W/2+WALL.t;
+      addPiece(e.x+n.x*lo,e.y+n.y*lo,e.x+n.x*hi,e.y+n.y*hi,z2+c,z2+c,d2,d2,lab+' \u00b7 end wall');
+    }
+    const isLast = i===(ch.segs||[]).length-1;
+    if(isLast && ch.botWall!==false && (ch.segs[i].k==='run'||ch.segs[i].k==='land')){
+      // wall across the bottom of the last run
+      const e={x:x2+Math.sin(h)*WALL.t/2, y:y2+Math.cos(h)*WALL.t/2}, lo=-(W/2+WALL.t), hi=W/2+WALL.t;
+      addPiece(e.x+n.x*lo,e.y+n.y*lo,e.x+n.x*hi,e.y+n.y*hi,z2+c,z2+c,d2,d2,lab+' \u00b7 bottom end wall');
+    }
     if(turnLand){
       // end wall across the turning landing, spanning both runs
       const e={x:x2+Math.sin(h)*WALL.t/2, y:y2+Math.cos(h)*WALL.t/2};
@@ -2297,8 +2323,9 @@ function computeChain(ch){
       box(x1,y1,x,y,h,W,'land'); lastLand={x1,y1,x2:x,y2:y,L};
       sideWalls(i,'Landing '+landNo,x1,y1,x,y,z1,z,d1,dist);
       r.L=L; r.label='Landing '+landNo;
-      checks.push({seg:i, name:`Landing ${landNo} length`, ok:L>=CHAIN_LIM.landMin-1e-6 || i===0,
-        msg:`${ftin(L)}${i===0?' (top, at the platform)':''} — ${L>=CHAIN_LIM.landMin-1e-6?'meets':'below'} the 5'-0" minimum`});
+      const afterTurn = i>0 && ch.segs[i-1].k==='turn';
+      checks.push({seg:i, name:`Landing ${landNo} length`, ok:L>=CHAIN_LIM.landMin-1e-6 || i===0 || afterTurn,
+        msg:`${ftin(L)}${i===0?' (top, at the platform)':afterTurn?' (continues the corner landing before it)':''} — ${L>=CHAIN_LIM.landMin-1e-6?'meets':'below'} the 5'-0" minimum`});
     } else if(g.k==='run'){
       const L=Math.max(0,+g.L||0), ratio=Math.max(1,+g.ratio||12);
       const dz=L/ratio;
@@ -2325,8 +2352,14 @@ function computeChain(ch){
           x-=Math.sin(h)*lastLand.L; y-=Math.cos(h)*lastLand.L; path.push({x,y});
         }
         h+=Math.PI;
-      } else { h+=sg*deg*DEG; }
-      r.deg=deg; r.label=`Turn ${deg}° ${g.side==='in'?'toward':'away from'} the track`;
+      } else {
+        // turn about the centre of the corner square formed by the last width of the landing
+        const cornered = lastLand && Math.abs(lastLand.x2-x1)<1e-6 && Math.abs(lastLand.y2-y1)<1e-6 && lastLand.L>=W/2;
+        if(cornered){ x-=Math.sin(h)*W/2; y-=Math.cos(h)*W/2; path.push({x,y}); }
+        h+=sg*deg*DEG;
+        if(cornered){ x+=Math.sin(h)*W/2; y+=Math.cos(h)*W/2; }
+      }
+      r.deg=deg; r.label=`Turn ${deg}° `+(g.side==='north'?'up-station':g.side==='south'?'down-station':(g.side==='in'?'toward':'away from')+' the track');
     } else if(g.k==='stair'){
       const n=Math.max(1,Math.round(+g.n||1));
       const treadsN = String(g.treads).trim()==='' ? n-1 : Math.max(0,Math.round(+g.treads));
@@ -2360,11 +2393,40 @@ function computeChain(ch){
   const gTopRaw=String(ch.gradeTop==null?'':ch.gradeTop).trim();
   const gTop = gTopRaw!=='' ? parseFloat(gTopRaw) : (C.grade0!=null ? C.grade0 : grade);
   const gBot = (grade!=null && isFinite(grade)) ? grade : gTop;
-  const gradeAt=d=> (gTop==null||gBot==null) ? null : gTop+(gBot-gTop)*(dist>0?d/dist:0);
+  let gradeAt=d=> (gTop==null||gBot==null) ? null : gTop+(gBot-gTop)*(dist>0?d/dist:0);
+  const isStair = (ch.segs||[]).some(g=>g.k==='stair') && !(ch.segs||[]).some(g=>g.k==='run');
+  let stairWall=null;
+  if(isStair){
+    // Stair support wall: a strip wall across the top of the stair, under the column
+    // that carries the stair; top set down from the platform by the FRP / bearing stack.
+    pieces.length=0;
+    const gw = String(ch.wallGrade==null?'':ch.wallGrade).trim()===''
+      ? (grade!=null&&isFinite(grade)?grade:C.grade0) : parseFloat(ch.wallGrade);
+    gradeAt=()=>gw;
+    if(WALL.on){
+      const h0=heading0, n0=nrm(h0);
+      const off = String(ch.wallOff==null?'':ch.wallOff).trim()==='' ? (anchor==='back'?0.625:0) : +ch.wallOff;
+      const len = +ch.wallLen>0 ? +ch.wallLen : W+2*WALL.t;
+      const below = String(ch.wallBelow==null?'':ch.wallBelow).trim()==='' ? 1.125 : +ch.wallBelow;
+      const top=z0-below, cx=pts[0].x+Math.sin(h0)*off, cy=pts[0].y+Math.cos(h0)*off;
+      addPiece(cx-n0.x*len/2,cy-n0.y*len/2,cx+n0.x*len/2,cy+n0.y*len/2,top,top,0,0,'Stair support wall \u00b7 at the top of the stair');
+      stairWall={top, below, len, off, grade:gw};
+    }
+  }
+  if(WALL.level){
+    // one level footing: a set elevation, or frost depth below the lowest grade along the walls
+    const fx=String(ch.ftgBot==null?'':ch.ftgBot).trim();
+    const gl=[gTop,gBot].filter(v=>v!=null&&isFinite(v));
+    WALL.bofFix = fx!=='' ? parseFloat(fx) : (isStair? (gradeAt(0)!=null?gradeAt(0)-WALL.frost:null) : (gl.length?Math.min(...gl)-WALL.frost:null));
+  }
   const walls=mergeWalls(pieces, pts[0], gradeAt, WALL);
+  if(isStair) walls.forEach(wl=>{ wl.kind='stair'; wl.desc='Stair support wall at the top of the stair'; });
   walls.forEach(wl=>{
-    wl.pts.forEach(q=>{ if(q.grade!=null && q.top < q.grade+WALL.curb-1/12)
+    if(!isStair) wl.pts.forEach(q=>{ if(q.grade!=null && q.top < q.grade+WALL.curb-1/12)
       checks.push({seg:-1, name:`${wl.name} top near grade`, ok:false, msg:`top ${q.top.toFixed(3)} is only ${((q.top-q.grade)*12).toFixed(1)}" above grade at ${q.where}`}); });
+    const shallow=wl.pts.filter(q=>q.grade!=null&&q.ftgBot!=null && q.grade-q.ftgBot < WALL.frost-0.005);
+    if(shallow.length) checks.push({seg:-1, name:`${wl.name} frost cover`, ok:false,
+      msg:`bottom of footing ${shallow[0].ftgBot.toFixed(2)} is only ${ftin(shallow[0].grade-shallow[0].ftgBot)} below grade at ${shallow[0].where} (${ftin(WALL.frost)} required)`});
     if(wl.ftgSlope>0.10) checks.push({seg:-1, name:`${wl.name} footing`, ok:false,
       msg:`the footing bottom falls ${(wl.ftgSlope*100).toFixed(1)}% along the wall \u2014 step it rather than slope it`});
   });
@@ -2372,8 +2434,8 @@ function computeChain(ch){
   if(grade!=null && isFinite(grade)){ miss=bottom.z-grade;
     checks.push({seg:-1, name:'Meets grade', ok:Math.abs(miss)<=0.5/12,
       msg:`bottom ${bottom.z.toFixed(3)} against grade ${grade.toFixed(2)} — ${miss>=0?'ends ':'ends '}${(Math.abs(miss)*12).toFixed(2)}" ${miss>=0?'above':'below'} grade`}); }
-  return {ch, z0, pts, path, foot, checks, segs:segOut, grade, miss, bottom, heading0:h, along, W, sta:s, anchor,
-          walls, WALL, gTop, gBot};
+  return {ch, z0, pts, path, foot, checks, segs:segOut, grade, miss, bottom, heading0, along, W, sta:s, anchor,
+          walls, WALL, gTop, gBot, isStair, stairWall};
 }
 // Wall pieces from neighbouring segments either continue each other (one wall with a
 // break in slope) or face each other across a shared wall (the wall between the two
@@ -2408,7 +2470,8 @@ function mergeWalls(pieces, O, gradeAt, WALL){
           if(!best||top>best.top+1e-9) best={top,d,src:it.src}; });
         const x=O.x+t*gp.ux+gp.c*gp.uy, y=O.y+t*gp.uy-gp.c*gp.ux;
         const grade=gradeAt(best.d);
-        const ftgBot= grade==null?null:grade-WALL.frost, ftgTop= ftgBot==null?null:ftgBot+WALL.ft;
+        const ftgBot= WALL.bofFix!=null&&isFinite(WALL.bofFix) ? WALL.bofFix : (grade==null?null:grade-WALL.frost);
+        const ftgTop= ftgBot==null?null:ftgBot+WALL.ft;
         return {t, x, y, top:best.top, d:best.d, src:best.src, grade, ftgBot, ftgTop,
                 height: ftgTop==null?null:best.top-ftgTop, exposed: grade==null?null:best.top-grade};
       });
@@ -2423,8 +2486,11 @@ function mergeWalls(pieces, O, gradeAt, WALL){
   walls.sort((p,q)=>p.first-q.first);
   walls.forEach((wl,i)=>{
     wl.name='W'+(i+1);
-    wl.desc = wl.side.includes('end wall') ? 'End wall at '+wl.srcs.join(', ').toLowerCase()
-            : (wl.srcs.length>2 ? 'Between the runs' : 'Along '+wl.srcs.join(' + ').toLowerCase())+(wl.side.length===1?' ('+wl.side[0]+')':'');
+    const only=wl.side.length===1;
+    wl.desc = only&&wl.side[0]==='bottom end wall' ? 'End wall at the bottom of '+wl.srcs.join(', ').toLowerCase()
+            : only&&wl.side[0]==='end wall' ? 'End wall at '+wl.srcs.join(', ').toLowerCase()
+            : (wl.srcs.filter(x=>/^Ramp run/.test(x)).length>1 && wl.srcs.length>2 ? 'Between the runs' : 'Along '+wl.srcs.join(' + ').toLowerCase())
+              +(wl.side.filter(x=>!/end wall/.test(x)).length===1?' ('+wl.side.filter(x=>!/end wall/.test(x))[0]+')':'');
     wl.pts.forEach((q,j)=>{ q.where = j===0?'start':j===wl.pts.length-1?'end':('break '+j); });
   });
   return walls;
@@ -2474,15 +2540,25 @@ function renderChainUI(){
     <div><label>Top, read from the platform${anc==='back'?' back edge':' at the centreline'}</label><input type="text" value="${R.z0.toFixed(3)}" readonly style="opacity:.75"></div>
   </div>
   <fieldset style="margin-top:10px;"><legend>walls</legend>
-    <p class="cfg" style="margin-top:0;"><input type="checkbox" id="ch_walls_${i}" ${c.walls!==false?'checked':''} onchange="chainSet(${i},'walls',this.checked)"> <label for="ch_walls_${i}" style="margin:0;display:inline;">Walls along both sides, on strip footings</label></p>
-    <div class="row4">
+    <p class="cfg" style="margin-top:0;"><input type="checkbox" id="ch_walls_${i}" ${c.walls!==false?'checked':''} onchange="chainSet(${i},'walls',this.checked)"> <label for="ch_walls_${i}" style="margin:0;display:inline;">${R.isStair?'Stair support wall across the top of the stair, on a strip footing':'Walls along both sides, on strip footings'}</label>
+    ${R.isStair?'':`&nbsp; <input type="checkbox" id="ch_bw_${i}" ${c.botWall!==false?'checked':''} onchange="chainSet(${i},'botWall',this.checked)"> <label for="ch_bw_${i}" style="margin:0;display:inline;">wall across the bottom</label>`}</p>
+    ${R.isStair?`<div class="row4">
+      <div><label>Top below platform <span class="unit">(ft)</span></label><input type="text" value="${c.wallBelow==null?1.125:c.wallBelow}" onchange="chainSet(${i},'wallBelow',parseFeetInches(this.value))" title="7&quot; FRP + 4&frac12;&quot; clear + 1&quot; base plate + 1&quot; grout = 13&frac12;&quot; (SP-312)"></div>
+      <div><label>Wall length <span class="unit">(ft)</span></label><input type="text" value="${c.wallLen==null?'':c.wallLen}" placeholder="${(R.W+2*R.WALL.t).toFixed(2)}" onchange="chainSet(${i},'wallLen',this.value===''?'':parseFeetInches(this.value))"></div>
+      <div><label>Centreline past the top <span class="unit">(ft)</span></label><input type="text" value="${c.wallOff==null?'':c.wallOff}" placeholder="${R.stairWall?R.stairWall.off.toFixed(3):''}" onchange="chainSet(${i},'wallOff',this.value===''?'':parseFeetInches(this.value))" title="Along the stair from where it ties in; 0.625 puts it on SV-1, 7&frac12;&quot; behind the back edge."></div>
+      <div><label>Grade at the wall <span class="unit">(ft)</span></label><input class="ovr" type="number" step="0.01" value="${esc(c.wallGrade==null?'':c.wallGrade)}" placeholder="${R.stairWall?R.stairWall.grade.toFixed(2):''}" onchange="chainSet(${i},'wallGrade',this.value)"></div>
+    </div>`:`<div class="row2">
       <div><label>Curb above ramp <span class="unit">(in)</span></label><input type="number" step="0.5" value="${c.curbIn==null?8:c.curbIn}" onchange="chainSet(${i},'curbIn',+this.value)" title="Top of wall above the adjacent walking surface."></div>
-      <div><label>Footing width <span class="unit">(ft)</span></label><input type="text" value="${c.ftgW==null?3.5:c.ftgW}" onchange="chainSet(${i},'ftgW',parseFeetInches(this.value))"></div>
+      <div><label>Grade at the top of the ramp <span class="unit">(ft)</span></label><input class="ovr" type="number" step="0.01" value="${esc(c.gradeTop==null?'':c.gradeTop)}" placeholder="${R.gTop!=null?R.gTop.toFixed(2):''}" onchange="chainSet(${i},'gradeTop',this.value)" title="Grade under the walls runs in a straight line from this to the bottom grade."></div>
+    </div>`}
+    <div class="row4">
+      <div><label>Footing width <span class="unit">(ft)</span></label><input type="text" value="${c.ftgW==null?3:c.ftgW}" onchange="chainSet(${i},'ftgW',parseFeetInches(this.value))"></div>
       <div><label>Footing thick <span class="unit">(ft)</span></label><input type="text" value="${c.ftgT==null?1.5:c.ftgT}" onchange="chainSet(${i},'ftgT',parseFeetInches(this.value))"></div>
-      <div><label>Bottom below grade <span class="unit">(ft)</span></label><input type="text" value="${c.frost==null?3.5:c.frost}" onchange="chainSet(${i},'frost',parseFeetInches(this.value))" title="Frost depth"></div>
+      <div><label>Min. below grade <span class="unit">(ft)</span></label><input type="text" value="${c.frost==null?3.5:c.frost}" onchange="chainSet(${i},'frost',parseFeetInches(this.value))" title="Frost depth to bottom of footing"></div>
+      <div><label>Footing bottom</label><select onchange="chainSet(${i},'ftgMode',this.value)">${opt('level','Level',c.ftgMode||'slope')}${opt('slope','Follows grade',c.ftgMode||'slope')}</select></div>
     </div>
-    <label>Grade at the top of the ramp <span class="unit">(ft)</span></label>
-    <input class="ovr" type="number" step="0.01" value="${esc(c.gradeTop==null?'':c.gradeTop)}" placeholder="${R.gTop!=null?R.gTop.toFixed(2):''}" onchange="chainSet(${i},'gradeTop',this.value)" title="Grade under the walls runs in a straight line from this to the bottom grade.">
+    ${c.ftgMode==='level'?`<label>Bottom of footing, level <span class="unit">(ft)</span></label>
+    <input class="ovr" type="number" step="0.01" value="${esc(c.ftgBot==null?'':c.ftgBot)}" placeholder="${R.WALL.bofFix!=null?R.WALL.bofFix.toFixed(2):''}" onchange="chainSet(${i},'ftgBot',this.value)" title="Blank = frost depth below the lowest grade along the walls.">`:''}
   </fieldset>
   <div class="scroll" style="margin-top:10px;"><table class="subtbl"><tr><th class="lbl">#</th><th class="lbl">Segment</th><th>Length / count</th><th>Slope 1:x / tread (in)</th><th>Riser (in)</th><th>Elev at end</th><th>Plan elev</th><th>&Delta; (in)</th><th></th></tr>`;
   c.segs.forEach((g,j)=>{
@@ -2492,7 +2568,7 @@ function renderChainUI(){
     if(g.k==='run'){ a=`<input type="text" value="${g.L}" onchange="segSet(${i},${j},'L',parseFeetInches(this.value))" title="Run length in plan, ft">`;
       b=`<input type="number" step="0.01" value="${g.ratio}" onchange="segSet(${i},${j},'ratio',+this.value)" title="1 vertical : x horizontal">`; }
     if(g.k==='turn'){ a=`<select onchange="segSet(${i},${j},'deg',+this.value)">${opt(180,'180°',g.deg)}${opt(90,'90°',g.deg)}</select>`;
-      b=`<select onchange="segSet(${i},${j},'side',this.value)">${opt('out','away from track',g.side)}${opt('in','toward track',g.side)}</select>`; }
+      b=`<select onchange="segSet(${i},${j},'side',this.value)">${opt('out','away from track',g.side)}${opt('in','toward track',g.side)}${opt('north','up-station',g.side)}${opt('south','down-station',g.side)}</select>`; }
     if(g.k==='stair'){ a=`<input type="number" step="1" value="${g.n}" onchange="segSet(${i},${j},'n',+this.value)" title="Number of risers">`;
       b=`<input type="number" step="0.25" value="${g.tread}" onchange="segSet(${i},${j},'tread',+this.value)" title="Tread depth, in">`;
       rr=`<input class="ovr${String(g.riser).trim()!==''?' edited':''}" type="number" step="0.0625" value="${esc(g.riser)}" placeholder="${r.riser!=null?(r.riser*12).toFixed(2):''}" onchange="segSet(${i},${j},'riser',this.value)" title="Blank = solve so the last flight reaches grade">`; }
@@ -2690,10 +2766,16 @@ function drawWallElev(){
     s+=`<path d="M${L(q=>q.grade)}" fill="none" stroke="var(--good)" stroke-width="1.3" stroke-dasharray="8 3"/>`;
     s+=`<text x="${(TX(P[P.length-1].t)+8).toFixed(1)}" y="${(TY(P[P.length-1].grade)+3).toFixed(1)}" font-size="9" font-family="monospace" fill="var(--good)">grade</text>`;
   } else s+=`<path d="M${L(q=>q.top)}" fill="none" stroke="var(--ink)" stroke-width="1.6"/>`;
-  s+=`<path d="M${L(q=>q.top-Wd.curb)}" fill="none" stroke="var(--oxide)" stroke-width="1" stroke-dasharray="3 3"/>`;
-  s+=`<text x="${(TX(P[P.length-1].t)+8).toFixed(1)}" y="${(TY(P[P.length-1].top-Wd.curb)+3).toFixed(1)}" font-size="9" font-family="monospace" fill="var(--oxide)">ramp surface</text>`;
+  const stw=wl.kind==='stair', surf=q=> stw ? R.z0 : q.top-Wd.curb;
+  s+=`<path d="M${L(surf)}" fill="none" stroke="var(--oxide)" stroke-width="1" stroke-dasharray="3 3"/>`;
+  s+=`<text x="${(TX(P[P.length-1].t)+8).toFixed(1)}" y="${(TY(surf(P[P.length-1]))+3).toFixed(1)}" font-size="9" font-family="monospace" fill="var(--oxide)">${stw?'top of platform '+R.z0.toFixed(2):'ramp surface'}</text>`;
+  // label the ends and the breaks that have room; close breaks keep only their leader line
+  const show=new Set([0]); let lastX=TX(P[0].t);
+  for(let j=1;j<P.length-1;j++){ const xx=TX(P[j].t); if(xx-lastX>=110 && TX(P[P.length-1].t)-xx>=110){ show.add(j); lastX=xx; } }
+  if(TX(P[P.length-1].t)-TX(P[0].t)>=160) show.add(P.length-1);
   P.forEach((q,j)=>{
     const x=TX(q.t), anc=j===0?'start':j===P.length-1?'end':'middle';
+    if(!show.has(j)){ s+=`<line x1="${x.toFixed(1)}" y1="${(TY(q.top)-4).toFixed(1)}" x2="${x.toFixed(1)}" y2="${((hasF?TY(q.ftgBot):TY(q.top))+4).toFixed(1)}" stroke="var(--ink-soft)" stroke-width="0.5" stroke-dasharray="2 2"/>`; return; }
     const lab=(y,txt,bold)=>`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${bold?9.5:8.5}" font-family="monospace" fill="var(--${bold?'ink':'ink-soft'})" text-anchor="${anc}"${bold?' font-weight="bold"':''} paint-order="stroke" stroke="var(--paper)" stroke-width="2.6">${txt}</text>`;
     s+=`<line x1="${x.toFixed(1)}" y1="${(TY(q.top)-4).toFixed(1)}" x2="${x.toFixed(1)}" y2="${((hasF?TY(q.ftgBot):TY(q.top))+4).toFixed(1)}" stroke="var(--ink-soft)" stroke-width="0.5" stroke-dasharray="2 2"/>`;
     s+=lab(TY(q.top)-8,'TOW '+q.top.toFixed(2),true);
@@ -2703,7 +2785,8 @@ function drawWallElev(){
   const yd=H-14;
   s+=`<line x1="${TX(P[0].t).toFixed(1)}" y1="${yd}" x2="${TX(P[P.length-1].t).toFixed(1)}" y2="${yd}" stroke="var(--ink-soft)" stroke-width="0.7"/>`+
      `<text x="${((TX(P[0].t)+TX(P[P.length-1].t))/2).toFixed(1)}" y="${yd-4}" font-size="9" font-family="monospace" fill="var(--ink-soft)" text-anchor="middle">${ftin(len)} · ${esc(wl.desc)}</text>`;
-  const leg=[wl.name, ftin(Wd.t)+' wall', ftin(Wd.fw)+' × '+ftin(Wd.ft)+' footing', 'curb '+(Wd.curb*12).toFixed(1)+'" above ramp', ftin(Wd.frost)+' grade to BOF', 'true scale'];
+  const leg=[wl.name, ftin(Wd.t)+' wall', ftin(Wd.fw)+' × '+ftin(Wd.ft)+' footing', stw ? 'top '+(R.stairWall.below*12).toFixed(1)+'" below platform' : 'curb '+(Wd.curb*12).toFixed(1)+'" above ramp',
+    Wd.bofFix!=null ? 'footing level' : ftin(Wd.frost)+' grade to BOF', 'true scale'];
   leg.forEach((t,j)=>{ s+=`<text x="${W-padR+30}" y="${padT+10+j*14}" font-size="${j?8.5:10}" font-family="monospace" fill="var(--${j?'ink-soft':'ink'})"${j?'':' font-weight="bold"'}>${t}</text>`; });
   svg.innerHTML=svgWrap('svg_chwall',s,W,H);
 }
@@ -2723,9 +2806,9 @@ function renderWallTable(){
   const wl=R.walls[Math.min(WALL_SEL,R.walls.length-1)];
   h+=`<h2 class="sec mt">${wl.name} — elevations at each end and break</h2><table class="wide"><tr><th class="lbl">Point</th><th>Along wall</th><th>Northing</th><th>Easting</th><th>Top of wall</th><th>Ramp surface</th><th>Grade</th><th>Top of footing</th><th>Bottom of footing</th><th>Wall height</th><th>Exposed</th></tr>`;
   wl.pts.forEach(q=>{ h+=`<tr><td class="lbl">${esc(q.where)}</td><td>${(q.t-wl.pts[0].t).toFixed(2)}</td><td>${q.y.toFixed(3)}</td><td>${q.x.toFixed(3)}</td>`+
-    `<td><strong>${f(q.top)}</strong></td><td>${f(q.top-R.WALL.curb)}</td><td>${f(q.grade,2)}</td><td>${f(q.ftgTop)}</td><td>${f(q.ftgBot)}</td>`+
+    `<td><strong>${f(q.top)}</strong></td><td>${R.isStair?f(R.z0)+' (platform)':f(q.top-R.WALL.curb)}</td><td>${f(q.grade,2)}</td><td>${f(q.ftgTop)}</td><td>${f(q.ftgBot)}</td>`+
     `<td>${q.height==null?'—':ftin(q.height)}</td><td>${q.exposed==null?'—':ftin(q.exposed)}</td></tr>`; });
-  h+='</table><p class="note">Coordinates are the wall centreline. Wall height is top of wall to top of footing. Grade under the walls runs in a straight line from the top grade to the bottom grade along the walking path.</p>';
+  h+='</table><p class="note">Coordinates are the wall centreline. Wall height is top of wall to top of footing. '+(R.isStair?'Top of the stair support wall is the platform less the FRP and bearing stack; grade is the grade at the wall.':'Grade under the walls runs in a straight line from the top grade to the bottom grade along the walking path.')+(R.WALL.bofFix!=null?' Footings are level at '+R.WALL.bofFix.toFixed(2)+'.':'')+'</p>';
   box.innerHTML=h;
 }
 function renderChains(){ renderChainUI(); drawChainPlan(); drawChainProfile(); drawWallElev(); renderWallTable(); renderChainResults(); }

@@ -166,19 +166,22 @@ All drawings are true scale with pan/zoom.
 Each ramp or stair is a **chain** of segments that starts where it ties into the platform and works downhill:
 
 - **Tie-in** — the platform back edge at a station (heading up-station, down-station or away from the track), or the begin/end of the platform. The top elevation is read live from the platform surface, so ramps follow any change to the platform.
-- **Segments** — landing (length), ramp run (length and slope 1:x), turn (90° or 180°, either side), stair flight (risers, tread depth, tread count; leave the riser blank to solve it so the flight lands on grade).
-- **Checks** — ramp slope 1:12, 30" max rise per run, 5' landings, 3' clear width; risers 4"–7", treads ≥ 11". A plan elevation can be entered beside each segment to compare against the drawings.
-- **Drawings** — plan along the track with footprints, walking line and elevations; profile along the walking line (ramps vertically exaggerated up to 10×, stairs true scale).
+- **Segments** — landing (length), ramp run (length and slope 1:x), turn (90° or 180°; toward/away from the track, or up-/down-station), stair flight (risers, tread depth, tread count; leave the riser blank to solve it so the flight lands on grade). A 90° turn pivots about the corner square formed by the last width of the landing before it, so an L-shaped entry (a landing straight back from the platform, then the ramp along the track) is modelled directly.
+- **Checks** — ramp slope 1:12, 30" max rise per run, 5' landings (a landing straight after a turn counts as part of the corner), 3' clear width; risers 4"–7", treads ≥ 11". A plan elevation can be entered beside each segment to compare against the drawings.
+- **Drawings** — plan along the track with footprints, walls, footings, walking line and elevations; profile along the walking line (ramps vertically exaggerated up to 10×, stairs true scale).
 
-**Ramp walls** (stairs not yet): cast-in-place walls along both sides of every landing and run, end walls at the top landing and across 180° turning landings; the side of the top landing facing the platform is left open.
+**Ramp walls** — cast-in-place walls along both sides of every landing and run:
 
-- Wall thickness (default 14"; also spaces the two runs at a 180° turn), top of wall = adjacent walking surface + curb (default 8").
-- Strip footing centred under the wall (default 3'-6" wide × 1'-6" thick), bottom a set depth below grade (default 3'-6", Connecticut frost depth).
-- Grade under the walls is a straight line from a **grade at the top of the ramp** to the bottom grade, along the walking path. This is a simplification to be refined.
-- Collinear wall pieces are merged into one wall; at each break the top follows the higher adjacent surface.
-- Outputs: walls drawn in plan with footing outlines, a developed true-scale elevation of any wall (TOW, ramp surface, grade, TOF, BOF, height at every break), a summary table and a per-wall table with centreline coordinates. Checks flag a wall top less than the curb above grade, and a footing whose bottom slopes more than 10% (step it).
+- Top of wall = adjacent walking surface + curb (default 8"). Wall thickness default 1'-2" (also spaces the two runs at a 180° turn).
+- End walls across a 180° turning landing, across the far end of a 90° corner (lining up with the next run's outside wall), and optionally across the bottom of the last run. At a 90° corner the wall on the turn side stops where the new run's wall picks up. The side of the top landing facing the platform is open.
+- Strip footing centred under the wall, default **3'-0" × 1'-6"** (11" toes, SP-214). **Footing bottom** either *level* (a set elevation, or frost depth below the lowest grade) or *follows grade* (frost depth below a straight-line grade from the top of the ramp to the bottom).
+- Collinear pieces merge into one wall; at each break the top follows the higher adjacent surface.
 
-Ramps, stairs and walls are not yet in the framing plan, 3D view, heat map or Calculations tab.
+**Stair support walls** — one strip wall across the top of each stair, under the column carrying the stair. Top = platform − 1.125 ft (7" FRP + 4½" clear + 1" base plate + 1" grout, SP-312), length and grade at the wall as inputs, centreline 7½" behind the back edge (on SV-1) for back-edge stairs, at the platform end for end stairs.
+
+**Outputs** — walls in plan with footing outlines; a developed true-scale elevation of any wall (top of wall, walking surface or platform, grade, top and bottom of footing, height at every break); a summary table and a per-wall table with centreline coordinates. Checks flag a wall top less than the curb above grade, a footing with less than frost cover, and a footing bottom sloping more than 10%.
+
+Ramps, stairs and walls are not yet in the framing plan, 3D view, heat map or Calculations tab. They save with the platform (Library / Export JSON).
 
 ### Heat map
 The platform surface unrolled along the track (station across, distance back from the edge down), coloured by one of:
