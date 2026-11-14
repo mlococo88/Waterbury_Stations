@@ -138,6 +138,7 @@
     <button class="tabbtn" role="tab" aria-selected="false" data-tab="struct">Structure</button>
     <button class="tabbtn" role="tab" aria-selected="false" data-tab="out">Platform Output</button>
     <button class="tabbtn" role="tab" aria-selected="false" data-tab="sup">Support Output</button>
+    <button class="tabbtn" role="tab" aria-selected="false" data-tab="heat">Heat Map</button>
     <button class="tabbtn" role="tab" aria-selected="false" data-tab="v3d">3D</button>
     <button class="tabbtn" role="tab" aria-selected="false" data-tab="calc">Calculations</button>
     <button class="tabbtn" role="tab" aria-selected="false" data-tab="notes">Notes</button>
@@ -585,6 +586,37 @@
       <span class="gctrl"><button data-sz="svg_long" data-a="in">+</button><button data-sz="svg_long" data-a="out">&minus;</button><button data-sz="svg_long" data-a="fit">Fit</button></span></div>
     <svg id="svg_long" viewBox="0 0 960 340"></svg>
   </div>
+</section>
+
+<!-- ============ TAB 9: HEAT MAP ============ -->
+<section class="tabpane" id="pane-heat" role="tabpanel">
+  <h2 class="sec">Top of platform heat map</h2>
+  <p class="note" style="margin-bottom:12px;">The platform surface unrolled along the track: station runs across, distance back from the platform edge runs down. Cells are coloured by the value chosen below. Hover any cell for the numbers.</p>
+  <fieldset>
+    <legend>what to show</legend>
+    <div class="row4">
+      <div><label>Colour by</label>
+        <select id="hm_metric">
+          <option value="elev">Top of platform elevation</option>
+          <option value="dev">Height above rail &minus; target</option>
+          <option value="run">Running slope along the platform</option>
+        </select></div>
+      <div><label>Cells along the platform</label><input type="number" id="hm_nx" value="120" min="20" max="400" step="10"></div>
+      <div><label>Cells across</label><input type="number" id="hm_ny" value="12" min="2" max="48" step="1"></div>
+      <div><label>Contour interval <span class="unit">(ft)</span></label><input type="number" id="hm_ci" value="0.10" min="0" step="0.05" title="0 turns contours off. Applies to elevation only."></div>
+    </div>
+    <p class="cfg" style="flex-wrap:wrap; gap:14px;">
+      <span><input type="checkbox" id="hm_sup" checked> <label for="hm_sup" style="margin:0;display:inline;">Support lines</label></span>
+      <span><input type="checkbox" id="hm_beam" checked> <label for="hm_beam" style="margin:0;display:inline;">Beam lines</label></span>
+      <span><input type="checkbox" id="hm_ext" checked> <label for="hm_ext" style="margin:0;display:inline;">Mark high and low points</label></span>
+    </p>
+  </fieldset>
+  <div class="svgcard">
+    <div class="cap"><span>Platform surface</span><span class="note" id="hm_note"></span>
+      <span class="gctrl"><button data-sz="svg_heat" data-a="in">+</button><button data-sz="svg_heat" data-a="out">&minus;</button><button data-sz="svg_heat" data-a="fit">Fit</button></span></div>
+    <svg id="svg_heat" viewBox="0 0 1200 420"></svg>
+  </div>
+  <div id="hm_stats" class="scroll"></div>
 </section>
 
 <!-- ============ TAB 8: NOTES ============ -->
@@ -2109,6 +2141,196 @@ function bind3D(){
 }
 
 /* ============================================================
+   HEAT MAP
+   The platform surface unrolled: x = station, y = distance back from the edge.
+   Sequential metrics use one blue ramp, light (low) to dark (high); the
+   deviation metric is diverging around zero with a neutral grey midpoint.
+   ============================================================ */
+const HM_SEQ=['#cde2fb','#b7d3f6','#9ec5f4','#86b6ef','#6da7ec','#5598e7','#3987e5','#2a78d6','#256abf','#1c5cab','#184f95','#104281','#0d366b'];
+const HM_DIV_LO=['#0d366b','#1c5cab','#3987e5','#86b6ef','#cde2fb'];   // below target
+const HM_DIV_HI=['#fbd0c9','#f29b8d','#e05f4b','#b83a28','#83261a'];   // above target
+const HM_MID='#f0efec';
+function hexLerp(a,b,t){
+  const p=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)), A=p(a), B=p(b);
+  return '#'+A.map((v,i)=>Math.round(v+(B[i]-v)*t).toString(16).padStart(2,'0')).join('');
+}
+function rampAt(stops,t){
+  t=Math.max(0,Math.min(1,t)); const f=t*(stops.length-1), i=Math.min(stops.length-2,Math.floor(f));
+  return hexLerp(stops[i],stops[i+1],f-i);
+}
+function divAt(v,m){
+  if(!(m>0)) return HM_MID;
+  const t=Math.max(-1,Math.min(1,v/m));
+  if(Math.abs(t)<1e-9) return HM_MID;
+  return t<0 ? hexLerp(HM_MID, rampAt(HM_DIV_LO, 1+t), Math.min(1,-t*4))
+             : hexLerp(HM_MID, rampAt(HM_DIV_HI, t), Math.min(1,t*4));
+}
+let HM_GRID=null;
+function drawHeat(){
+  const svg=document.getElementById('svg_heat'); if(!svg||!ENG) return;
+  const C=ENG.C, metric=g('hm_metric');
+  const s0=Math.min(C.sta0,C.sta1), s1=Math.max(C.sta0,C.sta1);
+  if(!(s1>s0) || !(C.W>0)){ svg.innerHTML=''; return; }
+  const NX=Math.max(20,Math.min(400,Math.round(gn('hm_nx')||120)));
+  const NY=Math.max(2,Math.min(48,Math.round(gn('hm_ny')||12)));
+  const W=1200, padL=70, padR=24, padT=40, padB=88;
+  const H=Math.round(Math.max(260, Math.min(520, padT+padB+NY*16)));
+  svg.setAttribute('viewBox','0 0 '+W+' '+H);
+  const pw=W-padL-padR, ph=H-padT-padB;
+  const TX=s=>padL+(s-s0)/(s1-s0)*pw, TY=w=>padT+(w/C.W)*ph;
+
+  // sample at cell centres
+  const val=(s,w)=>{
+    if(metric==='dev') return ENG.heightAboveRail(s) - C.V;
+    if(metric==='run') return ENG.runSlopeAt(s);
+    return ENG.surfElev(s,w);
+  };
+  const grid=[]; let lo=Infinity, hi=-Infinity, loAt=null, hiAt=null;
+  for(let j=0;j<NY;j++){ const w=(j+0.5)/NY*C.W, row=[];
+    for(let i=0;i<NX;i++){ const s=s0+(i+0.5)/NX*(s1-s0), v=val(s,w);
+      row.push(v);
+      if(v<lo){lo=v;loAt={s,w};} if(v>hi){hi=v;hiAt={s,w};} }
+    grid.push(row); }
+  // Cell centres never sit on the platform edges, where the surface usually peaks,
+  // so the reported extremes come from a finer scan that includes both edges and ends.
+  { const FX=NX*4, FY=Math.max(2,NY);
+    for(let i=0;i<=FX;i++){ const st=s0+i/FX*(s1-s0);
+      for(let j=0;j<=FY;j++){ const w=j/FY*C.W, v=val(st,w);
+        if(v<lo){lo=v;loAt={s:st,w};} if(v>hi){hi=v;hiAt={s:st,w};} } } }
+  HM_GRID={grid,NX,NY,s0,s1,metric,lo,hi};
+
+  const span=Math.max(hi-lo,1e-9), dm=Math.max(Math.abs(lo),Math.abs(hi));
+  const colour = metric==='dev' ? (v=>divAt(v,dm)) : (v=>rampAt(HM_SEQ,(v-lo)/span));
+  const cw=pw/NX, chh=ph/NY;
+  let s='';
+  s+=`<rect x="${padL}" y="${padT}" width="${pw}" height="${ph}" fill="var(--paper)"/>`;
+  for(let j=0;j<NY;j++) for(let i=0;i<NX;i++){
+    s+=`<rect x="${(padL+i*cw).toFixed(2)}" y="${(padT+j*chh).toFixed(2)}" width="${(cw+0.35).toFixed(2)}" height="${(chh+0.35).toFixed(2)}" fill="${colour(grid[j][i])}"/>`;
+  }
+
+  // contours: marching squares on the fine sample grid, elevation only
+  const ci=gn('hm_ci');
+  if(metric==='elev' && ci>0 && span/ci<=60){
+    const GX=Math.min(240,NX*2), GY=Math.max(6,NY*2);
+    const Z=[]; for(let j=0;j<=GY;j++){ const w=j/GY*C.W, r=[];
+      for(let i=0;i<=GX;i++) r.push(ENG.surfElev(s0+i/GX*(s1-s0),w)); Z.push(r); }
+    const px=i=>padL+i/GX*pw, py=j=>padT+j/GY*ph;
+    const segs=[];
+    for(let lev=Math.ceil(lo/ci)*ci; lev<=hi+1e-9; lev+=ci){
+      let d='';
+      for(let j=0;j<GY;j++) for(let i=0;i<GX;i++){
+        const c=[Z[j][i],Z[j][i+1],Z[j+1][i+1],Z[j+1][i]];
+        const P=[[i,j],[i+1,j],[i+1,j+1],[i,j+1]], hits=[];
+        for(let e=0;e<4;e++){ const a=c[e], b=c[(e+1)%4];
+          if((a-lev)*(b-lev)<0){ const t=(lev-a)/(b-a), A=P[e], B=P[(e+1)%4];
+            hits.push([px(A[0]+(B[0]-A[0])*t), py(A[1]+(B[1]-A[1])*t)]); } }
+        if(hits.length>=2) d+=`M${hits[0][0].toFixed(1)},${hits[0][1].toFixed(1)} L${hits[1][0].toFixed(1)},${hits[1][1].toFixed(1)} `;
+        if(hits.length===4) d+=`M${hits[2][0].toFixed(1)},${hits[2][1].toFixed(1)} L${hits[3][0].toFixed(1)},${hits[3][1].toFixed(1)} `;
+      }
+      if(d){ const major=Math.abs(lev/(ci*5)-Math.round(lev/(ci*5)))<1e-6;
+        s+=`<path d="${d}" fill="none" stroke="var(--ink)" stroke-width="${major?1.1:0.55}" opacity="${major?0.75:0.45}"/>`;
+        segs.push({lev,d,major}); }
+    }
+    // label major contours at the middle of the platform where they cross mid-width
+    segs.filter(q=>q.major).forEach(q=>{
+      const m=q.d.match(/M([\d.]+),([\d.]+)/); if(!m) return;
+      s+=`<text x="${(+m[1]).toFixed(1)}" y="${(+m[2]-3).toFixed(1)}" font-size="8.5" font-family="monospace" fill="var(--ink)" text-anchor="middle" paint-order="stroke" stroke="var(--paper)" stroke-width="2.4">${q.lev.toFixed(2)}</text>`;
+    });
+  }
+
+  // beam lines
+  if(gb('hm_beam')) BEAMS.forEach(bm=>{ const y=TY(+bm.off);
+    if(y<padT||y>padT+ph) return;
+    s+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${padL+pw}" y2="${y.toFixed(1)}" stroke="var(--ink)" stroke-width="0.8" stroke-dasharray="6 3" opacity="0.6"/>`;
+    s+=`<text x="${padL-6}" y="${(y+3).toFixed(1)}" font-size="8.5" font-family="monospace" fill="var(--ink-soft)" text-anchor="end">${esc(bm.lab)}</text>`; });
+  // support lines
+  const B=ENG.bents();
+  if(gb('hm_sup')) B.forEach(b=>{ if(b.sta<s0||b.sta>s1) return; const x=TX(b.sta);
+    s+=`<line x1="${x.toFixed(1)}" y1="${padT}" x2="${x.toFixed(1)}" y2="${padT+ph}" stroke="var(--paper)" stroke-width="2"/>`;
+    s+=`<line x1="${x.toFixed(1)}" y1="${padT}" x2="${x.toFixed(1)}" y2="${padT+ph}" stroke="var(--ink)" stroke-width="0.8"/>`;
+    s+=`<text x="${x.toFixed(1)}" y="${padT-6}" font-size="8.5" font-family="monospace" fill="var(--ink-soft)" text-anchor="middle">${esc(b.name)}</text>`; });
+
+  // frame, edge labels, axes
+  s+=`<rect x="${padL}" y="${padT}" width="${pw}" height="${ph}" fill="none" stroke="var(--ink)" stroke-width="1"/>`;
+  s+=`<text x="${padL-6}" y="${padT+4}" font-size="9" font-family="monospace" fill="var(--oxide)" text-anchor="end">edge</text>`;
+  s+=`<text x="${padL-6}" y="${padT+ph}" font-size="9" font-family="monospace" fill="var(--cyan)" text-anchor="end">back</text>`;
+  const ticks=Math.max(2,Math.min(10,Math.round(pw/120)));
+  for(let k=0;k<=ticks;k++){ const st=s0+(s1-s0)*k/ticks, x=TX(st);
+    s+=`<line x1="${x.toFixed(1)}" y1="${padT+ph}" x2="${x.toFixed(1)}" y2="${padT+ph+4}" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
+    s+=`<text x="${x.toFixed(1)}" y="${padT+ph+15}" font-size="8.5" font-family="monospace" fill="var(--ink-soft)" text-anchor="middle">${formatStation(st,0)}</text>`; }
+
+  // high / low markers
+  if(gb('hm_ext') && loAt && hiAt){
+    const mk=(p,lab,val2)=>{ const x=TX(p.s), y=TY(p.w);
+      return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5" fill="none" stroke="var(--paper)" stroke-width="3.5"/>`+
+             `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5" fill="none" stroke="var(--ink)" stroke-width="1.6"/>`+
+             `<text x="${(x+(x>padL+pw-90?-9:9)).toFixed(1)}" y="${(y+(y<padT+14?12:-7)).toFixed(1)}" font-size="9" font-family="monospace" fill="var(--ink)" text-anchor="${x>padL+pw-90?'end':'start'}" font-weight="bold" paint-order="stroke" stroke="var(--paper)" stroke-width="2.6">${lab} ${val2}</text>`; };
+    const fmt=v=>metric==='elev'?v.toFixed(3):metric==='dev'?((v*12>=0?'+':'')+(v*12).toFixed(3)+'"'):(v.toFixed(3)+'%');
+    s+=mk(hiAt,'HIGH',fmt(hi))+mk(loAt,'LOW',fmt(lo));
+  }
+
+  // legend: a gradient bar with its true range
+  const lx=padL, ly=H-34, lw=Math.min(360,pw*0.4), lh=10, ns=48;
+  for(let k=0;k<ns;k++){ const t=k/(ns-1);
+    const c=metric==='dev'?divAt(-dm+2*dm*t,dm):rampAt(HM_SEQ,t);
+    s+=`<rect x="${(lx+k*lw/ns).toFixed(2)}" y="${ly}" width="${(lw/ns+0.4).toFixed(2)}" height="${lh}" fill="${c}"/>`; }
+  s+=`<rect x="${lx}" y="${ly}" width="${lw}" height="${lh}" fill="none" stroke="var(--ink-soft)" stroke-width="0.6"/>`;
+  const unit=metric==='elev'?' ft':metric==='dev'?' in':' %';
+  const lv=v=>metric==='dev'?(v*12).toFixed(3):v.toFixed(metric==='elev'?3:3);
+  const lL=metric==='dev'?-dm:lo, lR=metric==='dev'?dm:hi;
+  s+=`<text x="${lx}" y="${ly+lh+12}" font-size="9" font-family="monospace" fill="var(--ink-soft)" text-anchor="start">${lv(lL)}${unit}</text>`;
+  if(metric==='dev') s+=`<text x="${lx+lw/2}" y="${ly+lh+12}" font-size="9" font-family="monospace" fill="var(--ink-soft)" text-anchor="middle">0 (on target)</text>`;
+  s+=`<text x="${lx+lw}" y="${ly+lh+12}" font-size="9" font-family="monospace" fill="var(--ink-soft)" text-anchor="end">${lv(lR)}${unit}</text>`;
+  const ttl={elev:'Top of platform elevation',dev:'Height above rail minus target, at the edge',run:'Running slope along the platform'}[metric];
+  s+=`<text x="${lx}" y="${ly-6}" font-size="9" font-family="monospace" fill="var(--ink)" text-anchor="start">${ttl}${metric==='elev'&&ci>0?' · contours every '+ci+' ft':''}</text>`;
+  s+=`<text x="${padL+pw}" y="${H-10}" font-size="8" font-family="monospace" fill="var(--graphite)" text-anchor="end">unrolled along the track · not to scale across</text>`;
+
+  svg.innerHTML=svgWrap('svg_heat',s,W,H);
+  svg._hm={padL,padT,pw,ph,W,H,cw,chh,s0,s1};
+
+  const n=document.getElementById('hm_note');
+  if(n) n.textContent=formatStation(s0)+' to '+formatStation(s1)+' · '+NX+' × '+NY+' cells';
+  const st=document.getElementById('hm_stats');
+  if(st){
+    const rows=[];
+    if(metric==='elev'){
+      rows.push(['Highest top of platform', hi.toFixed(3)+' ft', formatStation(hiAt.s)+', '+hiAt.w.toFixed(2)+' ft back']);
+      rows.push(['Lowest top of platform', lo.toFixed(3)+' ft', formatStation(loAt.s)+', '+loAt.w.toFixed(2)+' ft back']);
+      rows.push(['Range', (hi-lo).toFixed(3)+' ft', ((hi-lo)*12).toFixed(2)+' in over the whole surface']);
+    } else if(metric==='dev'){
+      rows.push(['Furthest above target', '+'+(Math.max(hi,0)*12).toFixed(3)+' in', formatStation(hiAt.s)]);
+      rows.push(['Furthest below target', (Math.min(lo,0)*12).toFixed(3)+' in', formatStation(loAt.s)]);
+      const a=(C.limVmin-C.V)*12, b2=(C.limVmax-C.V)*12, sg=v=>(v>=0?'+':'')+v.toFixed(3);
+      rows.push(['Allowed', sg(a)+' to '+sg(b2)+' in', 'from the tolerances on the Platform tab']);
+    } else {
+      rows.push(['Steepest uphill', hi.toFixed(3)+' %', formatStation(hiAt.s)]);
+      rows.push(['Steepest downhill', lo.toFixed(3)+' %', formatStation(loAt.s)]);
+      rows.push(['Limit', '±'+C.limRun.toFixed(2)+' %', 'from the tolerances on the Platform tab']);
+    }
+    st.innerHTML='<table><tr><th class="lbl">Measure</th><th>Value</th><th class="lbl">Where</th></tr>'+
+      rows.map(r=>`<tr><td class="lbl">${r[0]}</td><td>${r[1]}</td><td class="lbl">${r[2]}</td></tr>`).join('')+'</table>'+
+      '<p class="note">The full grid of values at any interval is on the Platform Output tab.</p>';
+  }
+}
+function bindHeat(){
+  const svg=document.getElementById('svg_heat'); if(!svg||svg._hb) return; svg._hb=true;
+  ['hm_metric','hm_nx','hm_ny','hm_ci','hm_sup','hm_beam','hm_ext'].forEach(id=>{
+    const e=document.getElementById(id); if(e) e.addEventListener('input',drawHeat); });
+  const box=document.getElementById('hovbox');
+  svg.addEventListener('mousemove',e=>{
+    const m=svg._hm; if(!m||!HM_GRID||!ENG){ return; }
+    const r=svg.getBoundingClientRect(), v=svgView('svg_heat');
+    const sx=((e.clientX-r.left)*m.W/r.width - v.Px)/v.Z, sy=((e.clientY-r.top)*m.H/r.height - v.Py)/v.Z;
+    if(sx<m.padL||sx>m.padL+m.pw||sy<m.padT||sy>m.padT+m.ph){ box.style.display='none'; return; }
+    const C=ENG.C, st=m.s0+(sx-m.padL)/m.pw*(m.s1-m.s0), w=(sy-m.padT)/m.ph*C.W;
+    const z=ENG.surfElev(st,w), dv=(ENG.heightAboveRail(st)-C.V)*12, rs=ENG.runSlopeAt(st);
+    box.textContent='sta '+formatStation(st)+'\n'+w.toFixed(2)+' ft back from edge\nTOP  '+z.toFixed(3)+' ft\nvs target '+(dv>=0?'+':'')+dv.toFixed(3)+' in\nrunning   '+rs.toFixed(3)+' %';
+    box.style.display='block'; box.style.left=(e.clientX+14)+'px'; box.style.top=(e.clientY+14)+'px';
+  });
+  svg.addEventListener('mouseleave',()=>{ box.style.display='none'; });
+}
+
+/* ============================================================
    LONGITUDINAL (support tab)
    ============================================================ */
 function drawLong(){ drawProfileView('svg_long',{full:false}); }
@@ -2776,7 +2998,7 @@ function refreshAll(){
   drawSection('svg_psec', ACTIVE_STA, false);
   drawSection('svg_osec', ACTIVE_STA, true);
   const sb=activeBent(); drawSection('svg_ssec', sb?sb.sta:ACTIVE_STA, true, sb);
-  drawLong(); drawFramePlan(); draw3D();
+  drawLong(); drawFramePlan(); draw3D(); drawHeat();
 
   buildOutTable(); buildSupportTables(); buildChecks(); runValidation(); renderCalcs(); notesCount();
   syncStaControls(); renderSnap();
@@ -2792,6 +3014,7 @@ function refreshAll(){
   REDRAW['svg_ssec']=()=>{ const b=activeBent(); drawSection('svg_ssec', b?b.sta:ACTIVE_STA, true, b); };
   REDRAW['svg_long']=drawLong;
   REDRAW['svg_frame']=drawFramePlan;
+  REDRAW['svg_heat']=drawHeat;
   REDRAW['svg_3d']=draw3D;
   if(_armed) autosave();
 }
@@ -2934,14 +3157,14 @@ function applyCantilevers(){
    SAVE / LOAD   (carried over)
    ============================================================ */
 const KEY='platgeom.autosave.v1', LIBKEY='platgeom.library.v1', DEFKEY='platgeom.default.v1';
-const FIELDS=['notes_txt','calc_dec','t_stafmt','t_curvedef','p_extmode','t_sta0','t_brg0','t_y0','t_x0','t_gauge','t_profref','p_sta0','p_sta1','p_side','p_H','p_V','p_vdatum',
+const FIELDS=['hm_metric','hm_nx','hm_ny','hm_ci','notes_txt','calc_dec','t_stafmt','t_curvedef','p_extmode','t_sta0','t_brg0','t_y0','t_x0','t_gauge','t_profref','p_sta0','p_sta1','p_side','p_H','p_V','p_vdatum',
   'p_xs','p_xsdir','p_W','p_tact','p_mode','p_extra','v_carL','v_truck','v_half','v_floor',
   's_panel_in','s_capmode','s_sole_in','s_elast_in','s_masanchor_in','s_masanchorsel','s_masfloor_in','s_masinc','s_masrnd','s_capd','s_capt','s_capf','s_capw','s_piertype','s_ftproj','s_ftt','s_ftbury','s_ftfill','s_pedoff','s_peddatum','s_pedw','s_pedrise','s_grout_in','s_bplate_in',
   's_grade0','s_pcw','s_pct','s_pcd','s_pcpile','s_pcbury','s_pcdatum','s_pedhmin','s_colht',
   's_piledatum','s_pileembed_in','s_piledia_in',
   'lim_xs','lim_run','lim_vgap','lim_hgap','lim_vmin','lim_vmax','lim_cant','o_int','o_dec','o_extra','val_in',
   'b_first','b_last','b_count','b_cantA','b_cantB','plan_rot'];
-const CHECKS=['p_widen','s_ped','s_pile','o_coords','o_beams','b_normal','sec_dims','sec_dims2','sec_dims3',
+const CHECKS=['hm_sup','hm_beam','hm_ext','p_widen','s_ped','s_pile','o_coords','o_beams','b_normal','sec_dims','sec_dims2','sec_dims3',
   'v3d_plat','v3d_tact','v3d_beam','v3d_cap','v3d_pile_s','v3d_ped','v3d_col','v3d_rail','v3d_grnd','v3d_lab','v3d_edge'];
 let CURNAME=null;
 
@@ -3132,8 +3355,8 @@ function resetFields(){ FIELDS.forEach(id=>{ const e=document.getElementById(id)
 (function init(){
   captureDefaults();
   freshDefaults();
-  bindInputs(); bindTabs(); bindButtons(); bind3D();
-  ['svg_plan','svg_prof','svg_psec','svg_osec','svg_ssec','svg_long','svg_frame'].forEach(id=>{
+  bindInputs(); bindTabs(); bindButtons(); bind3D(); bindHeat();
+  ['svg_plan','svg_prof','svg_psec','svg_osec','svg_ssec','svg_long','svg_frame','svg_heat'].forEach(id=>{
     const svg=document.getElementById(id); if(!svg) return;
     attachSvg(id);
   });

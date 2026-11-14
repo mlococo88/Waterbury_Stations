@@ -41,6 +41,7 @@ Everything is stored in decimal feet internally. Stationing, feet-inches and inc
 | **Structure** | Deck panel, cap mode, bearing assembly, beam lines, pier type, cap/pier wall, spread footing, canopy pedestal, pedestal pile cap, micropiles, proposed grade, support layout and table, section through a support |
 | **Platform Output** | Checks, top-of-platform table at an interval, cross section at any station, validation against known points |
 | **Support Output** | Framing plan, support elevation table, beam seats, micropile layout, beam spans, longitudinal profile |
+| **Heat Map** | Platform surface unrolled along the track, coloured by elevation, deviation from target height above rail, or running slope; contours and high/low points |
 | **3D** | Orbitable 3D model of the whole structure with ground |
 | **Calculations** | Full derivation of every elevation at a chosen support |
 | **Notes** | Free-text project notes, saved with the platform |
@@ -159,6 +160,15 @@ All drawings are true scale with pan/zoom.
 - **Sections** (typical, at any station, through a support) with dimension chains, leaders and elevation callouts modelled on the HDR typical section. Labels are placed by a collision-avoiding pass with priority (dimensions → elevations → notes). Sections mirror for a left-side platform. A Dimensions toggle turns annotation off.
 - **Framing plan**: platform, cap beams or footings, beam lines, micropiles, pedestal pile caps, cantilever callouts at both ends.
 - **3D**: painter's-algorithm renderer, no external library. Layers for platform, tactile strip, beams (true wide flanges), cap beams/footings, micropiles, pedestals, canopy columns, track, ground (interpolated from per-support grades, adjustable opacity), and support labels. Station window, vertical exaggeration, pile stub length.
+
+### Heat map
+The platform surface unrolled along the track (station across, distance back from the edge down), coloured by one of:
+
+- **Top of platform elevation** — sequential blue, light = low, dark = high, with contours at a set interval (every fifth labelled). Good for spotting drainage low points and the crest or sag of a vertical curve.
+- **Height above rail − target** — diverging around zero with a neutral midpoint; shows where an independent platform profile departs from the design height above the rail.
+- **Running slope** — sequential, against the running slope limit.
+
+Support and beam lines overlay the surface; high and low points are marked and reported from a fine scan that includes both platform edges. Hover any cell for station, offset, elevation, deviation and running slope. The view is not to scale across the platform.
 
 ### Calculations tab
 Pick a support; every elevation is derived as **symbol = formula = substituted values = result**, typeset with KaTeX (CDN; plain-text fallback offline). Sections: track (profile incl. vertical curve equation, cant, rails), horizontal (radius, curve setback, edge coordinates), platform surface, every beam, cap/wall and every bearing, micropiles, pedestal, pedestal pile cap or spread footing. Copy as text and Print.
