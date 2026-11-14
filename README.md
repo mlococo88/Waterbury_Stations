@@ -41,6 +41,7 @@ Everything is stored in decimal feet internally. Stationing, feet-inches and inc
 | **Structure** | Deck panel, cap mode, bearing assembly, beam lines, pier type, cap/pier wall, spread footing, canopy pedestal, pedestal pile cap, micropiles, proposed grade, support layout and table, section through a support |
 | **Platform Output** | Checks, top-of-platform table at an interval, cross section at any station, validation against known points |
 | **Support Output** | Framing plan, support elevation table, beam seats, micropile layout, beam spans, longitudinal profile |
+| **Ramps & Stairs** | Ramps and stairs tied into the platform back edge or ends, built as chains of segments; plan, profile, ADA checks, and ramp walls with footings (elevation view and tables) |
 | **Heat Map** | Platform surface unrolled along the track, coloured by elevation, deviation from target height above rail, or running slope; contours and high/low points |
 | **3D** | Orbitable 3D model of the whole structure with ground |
 | **Calculations** | Full derivation of every elevation at a chosen support |
@@ -160,6 +161,24 @@ All drawings are true scale with pan/zoom.
 - **Sections** (typical, at any station, through a support) with dimension chains, leaders and elevation callouts modelled on the HDR typical section. Labels are placed by a collision-avoiding pass with priority (dimensions → elevations → notes). Sections mirror for a left-side platform. A Dimensions toggle turns annotation off.
 - **Framing plan**: platform, cap beams or footings, beam lines, micropiles, pedestal pile caps, cantilever callouts at both ends.
 - **3D**: painter's-algorithm renderer, no external library. Layers for platform, tactile strip, beams (true wide flanges), cap beams/footings, micropiles, pedestals, canopy columns, track, ground (interpolated from per-support grades, adjustable opacity), and support labels. Station window, vertical exaggeration, pile stub length.
+
+### Ramps & Stairs
+Each ramp or stair is a **chain** of segments that starts where it ties into the platform and works downhill:
+
+- **Tie-in** — the platform back edge at a station (heading up-station, down-station or away from the track), or the begin/end of the platform. The top elevation is read live from the platform surface, so ramps follow any change to the platform.
+- **Segments** — landing (length), ramp run (length and slope 1:x), turn (90° or 180°, either side), stair flight (risers, tread depth, tread count; leave the riser blank to solve it so the flight lands on grade).
+- **Checks** — ramp slope 1:12, 30" max rise per run, 5' landings, 3' clear width; risers 4"–7", treads ≥ 11". A plan elevation can be entered beside each segment to compare against the drawings.
+- **Drawings** — plan along the track with footprints, walking line and elevations; profile along the walking line (ramps vertically exaggerated up to 10×, stairs true scale).
+
+**Ramp walls** (stairs not yet): cast-in-place walls along both sides of every landing and run, end walls at the top landing and across 180° turning landings; the side of the top landing facing the platform is left open.
+
+- Wall thickness (default 14"; also spaces the two runs at a 180° turn), top of wall = adjacent walking surface + curb (default 8").
+- Strip footing centred under the wall (default 3'-6" wide × 1'-6" thick), bottom a set depth below grade (default 3'-6", Connecticut frost depth).
+- Grade under the walls is a straight line from a **grade at the top of the ramp** to the bottom grade, along the walking path. This is a simplification to be refined.
+- Collinear wall pieces are merged into one wall; at each break the top follows the higher adjacent surface.
+- Outputs: walls drawn in plan with footing outlines, a developed true-scale elevation of any wall (TOW, ramp surface, grade, TOF, BOF, height at every break), a summary table and a per-wall table with centreline coordinates. Checks flag a wall top less than the curb above grade, and a footing whose bottom slopes more than 10% (step it).
+
+Ramps, stairs and walls are not yet in the framing plan, 3D view, heat map or Calculations tab.
 
 ### Heat map
 The platform surface unrolled along the track (station across, distance back from the edge down), coloured by one of:
