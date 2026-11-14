@@ -2288,9 +2288,12 @@ function computeChain(ch){
       let off=o, ex=x2, ey=y2, ez=z2, ed=d2;
       if(turnLand && sd===sg2) off=(W+WALL.t)+o;     // far side of the turning landing
       if(turn90 && sd===sg9){                         // stop at the corner
-        const keep=Math.max(0, segL-W-WALL.t/2), f=segL>0?keep/segL:0;
+        const keep=Math.max(0, segL-W), f=segL>0?keep/segL:0;   // through the new run's wall, flush with its inside face
         ex=x1+(x2-x1)*f; ey=y1+(y2-y1)*f; ez=z1+(z2-z1)*f; ed=d1+(d2-d1)*f; }
-      addPiece(x1+v.x*off,y1+v.y*off,ex+v.x*off,ey+v.y*off,z1+c,ez+c,d1,ed,lab+' \u00b7 '+sideName(v));
+      // walls of a landing straight back from the platform can start under the platform
+      const und = (i===0 && anchor==='back' && !along) ? Math.max(0,+ch.wallsUnder||0) : 0;
+      const sx=x1-Math.sin(h)*und, sy=y1-Math.cos(h)*und;
+      addPiece(sx+v.x*off,sy+v.y*off,ex+v.x*off,ey+v.y*off,z1+c,ez+c,d1,ed,lab+' \u00b7 '+sideName(v));
     });
     if(turn90){
       // wall across the far end of the corner; it lines up with the next run's outside wall
@@ -2421,6 +2424,7 @@ function computeChain(ch){
   }
   const walls=mergeWalls(pieces, pts[0], gradeAt, WALL);
   if(isStair) walls.forEach(wl=>{ wl.kind='stair'; wl.desc='Stair support wall at the top of the stair'; });
+  const padsOut=applyPads(ch, walls, WALL, checks);
   walls.forEach(wl=>{
     if(!isStair) wl.pts.forEach(q=>{ if(q.grade!=null && q.top < q.grade+WALL.curb-1/12)
       checks.push({seg:-1, name:`${wl.name} top near grade`, ok:false, msg:`top ${q.top.toFixed(3)} is only ${((q.top-q.grade)*12).toFixed(1)}" above grade at ${q.where}`}); });
@@ -2435,7 +2439,50 @@ function computeChain(ch){
     checks.push({seg:-1, name:'Meets grade', ok:Math.abs(miss)<=0.5/12,
       msg:`bottom ${bottom.z.toFixed(3)} against grade ${grade.toFixed(2)} — ${miss>=0?'ends ':'ends '}${(Math.abs(miss)*12).toFixed(2)}" ${miss>=0?'above':'below'} grade`}); }
   return {ch, z0, pts, path, foot, checks, segs:segOut, grade, miss, bottom, heading0, along, W, sta:s, anchor,
-          walls, WALL, gTop, gBot, isStair, stairWall};
+          walls, WALL, gTop, gBot, isStair, stairWall, pads:padsOut};
+}
+// Level bearing pads where columns land on a wall. A pad is located by the column's
+// station and its distance back from the platform back edge, and takes the wall whose
+// centreline passes through it. Over the pad the top of wall is level: at a set
+// elevation, a set depth below the platform, or (blank) the higher of the two ends,
+// with a step down to the sloping top at the low end. A pad within 6" of the end of a
+// wall runs to the end.
+function applyPads(ch, walls, WALL, checks){
+  const out=[], C=ENG.C;
+  (ch.pads||[]).forEach((pd,k)=>{
+    const sta=parseFloat(pd.sta); if(!isFinite(sta)) return;
+    const off=+pd.off||0, len=Math.max(0.1,+pd.len||2), name=pd.name||('Pad '+(k+1));
+    const P=ENG.platPt(sta, C.W+off, 0);
+    let hit=null;
+    walls.forEach(wl=>{ const A=wl.pts[0], B=wl.pts[wl.pts.length-1];
+      let ux=B.x-A.x, uy=B.y-A.y; const L=Math.hypot(ux,uy); if(L<1e-6) return; ux/=L; uy/=L;
+      const tp=(P.x-A.x)*ux+(P.y-A.y)*uy, lat=Math.abs((P.x-A.x)*uy-(P.y-A.y)*ux);
+      if(lat<=WALL.t/2+0.3 && tp>=-0.3 && tp<=L+0.3 && (!hit||lat<hit.lat)) hit={wl,tp:A.t+tp,lat}; });
+    if(!hit){ out.push({name, sta, off, ok:false}); checks.push({seg:-1, name:`${name} column pad`, ok:false, msg:`no wall found under ${formatStation(sta)}, ${off.toFixed(2)} ft behind the back edge`}); return; }
+    const wl=hit.wl, Q=wl.pts, t0=Q[0].t, tN=Q[Q.length-1].t;
+    Q.forEach(q=>{ if(q.surf==null) q.surf=q.top-WALL.curb; });
+    let ta=hit.tp-len/2, tb=hit.tp+len/2;
+    if(ta-t0<0.5) ta=t0; if(tN-tb<0.5) tb=tN;
+    const at=t=>{ // interpolate the wall at t (last of any duplicates)
+      let j=0; while(j<Q.length-2 && Q[j+1].t<t) j++;
+      const a=Q[j], b=Q[Math.min(j+1,Q.length-1)], f=(b.t-a.t)>1e-9?Math.max(0,Math.min(1,(t-a.t)/(b.t-a.t))):0;
+      const L2=(u,v)=>(u==null||v==null)?null:u+(v-u)*f;
+      return {t, x:L2(a.x,b.x), y:L2(a.y,b.y), top:L2(a.top,b.top), surf:L2(a.surf,b.surf), d:L2(a.d,b.d), src:a.src, grade:L2(a.grade,b.grade), ftgBot:L2(a.ftgBot,b.ftgBot), ftgTop:L2(a.ftgTop,b.ftgTop)}; };
+    const A=at(ta), B=at(tb);
+    const el=String(pd.elev==null?'':pd.elev).trim(), bl=String(pd.below==null?'':pd.below).trim();
+    const top = el!=='' ? parseFloat(el) : bl!=='' ? ENG.surfElev(sta, C.W)-parseFloat(bl) : Math.max(A.top,B.top);
+    const pts=Q.filter(q=>q.t<ta-1e-6);
+    if(ta>t0+1e-6 && Math.abs(A.top-top)>1e-4) pts.push(A);
+    pts.push(Object.assign({},A,{top, pad:name}));
+    pts.push(Object.assign({},B,{top, pad:name}));
+    if(tb<tN-1e-6 && Math.abs(B.top-top)>1e-4) pts.push(B);
+    Q.filter(q=>q.t>tb+1e-6).forEach(q=>pts.push(q));
+    pts.forEach(q=>{ q.height=q.ftgTop==null?null:q.top-q.ftgTop; q.exposed=q.grade==null?null:q.top-q.grade; });
+    wl.pts=pts;
+    out.push({name, sta, off, ok:true, wall:wl.name, top, len:tb-ta, x:P.x, y:P.y});
+  });
+  walls.forEach(wl=>wl.pts.forEach((q,j)=>{ q.where = q.pad ? q.pad+(j>0&&wl.pts[j-1].pad===q.pad?' pad end':' pad start') : j===0?'start':j===wl.pts.length-1?'end':('break '+j); }));
+  return out;
 }
 // Wall pieces from neighbouring segments either continue each other (one wall with a
 // break in slope) or face each other across a shared wall (the wall between the two
@@ -2499,6 +2546,10 @@ function allChains(){ return ENG ? CHAINS.map(ch=>{ try{ return computeChain(ch)
 
 /* ---------- inputs ---------- */
 function chainSet(i,k,v){ CHAINS[i][k]=v; refreshAll(); }
+function padAdd(i){ const c=CHAINS[i]; c.pads=c.pads||[]; const R=computeChain(c);
+  c.pads.push({name:'Col '+(c.pads.length+1), sta:+R.sta.toFixed(2), off:'', len:2, elev:'', below:''}); refreshAll(); }
+function padSet(i,k,key,v){ CHAINS[i].pads[k][key]= (key==='sta'&&isFinite(v))? +(+v).toFixed(3) : v; refreshAll(); }
+function padDel(i,k){ CHAINS[i].pads.splice(k,1); refreshAll(); }
 function segSet(i,j,k,v){ CHAINS[i].segs[j][k]=v; refreshAll(); }
 function segAdd(i,k){
   const d={land:{k:'land',L:5,plan:''}, run:{k:'run',L:29,ratio:12.21,plan:''}, turn:{k:'turn',deg:180,side:'out',plan:''},
@@ -2557,6 +2608,20 @@ function renderChainUI(){
       <div><label>Min. below grade <span class="unit">(ft)</span></label><input type="text" value="${c.frost==null?3.5:c.frost}" onchange="chainSet(${i},'frost',parseFeetInches(this.value))" title="Frost depth to bottom of footing"></div>
       <div><label>Footing bottom</label><select onchange="chainSet(${i},'ftgMode',this.value)">${opt('level','Level',c.ftgMode||'slope')}${opt('slope','Follows grade',c.ftgMode||'slope')}</select></div>
     </div>
+    ${R.isStair?'':`<div class="row2" style="margin-top:6px;">
+      <div><label>Entry walls start under the platform <span class="unit">(ft)</span></label><input type="text" value="${c.wallsUnder==null?'':c.wallsUnder}" placeholder="0" onchange="chainSet(${i},'wallsUnder',this.value===''?'':parseFeetInches(this.value))" title="For a landing straight back from the platform: how far the side walls run in front of the back edge, under the platform."></div>
+      <div></div></div>`}
+    <div style="margin-top:8px;"><label>Columns on the walls &mdash; level pads</label>
+    <table class="subtbl"><tr><th class="lbl">Column</th><th>Station</th><th>Behind back edge (ft)</th><th>Pad length (ft)</th><th>Pad elev</th><th>or below platform (ft)</th><th>Top</th><th></th></tr>
+    ${(c.pads||[]).map((pd,k)=>{ const po=(R.pads||[])[k]||{};
+      const inp=(key,w)=>`<input type="text" style="width:${w}px" value="${esc(pd[key]==null?'':pd[key])}" onchange="padSet(${i},${k},'${key}',this.value)">`;
+      return `<tr><td class="lbl">${inp('name',52)}</td><td><input type="text" style="width:90px" value="${pd.sta===''||pd.sta==null?'':formatStation(+pd.sta)}" onchange="padSet(${i},${k},'sta',parseStation(this.value))"></td>
+        <td>${inp('off',58)}</td><td>${inp('len',50)}</td><td>${inp('elev',62)}</td><td>${inp('below',50)}</td>
+        <td><strong>${po.ok?po.top.toFixed(3):'<span style="color:var(--bad)">no wall</span>'}</strong>${po.ok?' <span class="note">'+po.wall+'</span>':''}</td>
+        <td><button class="sm ghost" onclick="padDel(${i},${k})">&times;</button></td></tr>`; }).join('')}
+    </table>
+    <button class="sm ghost" style="margin-top:4px;" onclick="padAdd(${i})">+ Column pad</button>
+    <p class="note" style="margin:4px 0 0;">Pad elev and below-platform blank: the pad is level at the higher end. A pad within 6" of a wall end runs to the end.</p></div>
     ${c.ftgMode==='level'?`<label>Bottom of footing, level <span class="unit">(ft)</span></label>
     <input class="ovr" type="number" step="0.01" value="${esc(c.ftgBot==null?'':c.ftgBot)}" placeholder="${R.WALL.bofFix!=null?R.WALL.bofFix.toFixed(2):''}" onchange="chainSet(${i},'ftgBot',this.value)" title="Blank = frost depth below the lowest grade along the walls.">`:''}
   </fieldset>
@@ -2693,7 +2758,7 @@ function drawChainPlan(){
     if(Q.walls && Q.walls.length) Q.walls.forEach(wl=>{
       const A0=wl.pts[0], B0=wl.pts[wl.pts.length-1];
       let ex=B0.x-A0.x, ey=B0.y-A0.y; const em=Math.hypot(ex,ey)||1; ex/=em; ey/=em;
-      const e=Q.WALL.t/2;   // carry each end half a thickness so corners close
+      const e=0;            // walls already run to the outside faces of the walls they meet
       const cl=wl.pts.map((q,j)=>({x:q.x+(j===0?-ex*e:j===wl.pts.length-1?ex*e:0), y:q.y+(j===0?-ey*e:j===wl.pts.length-1?ey*e:0)}));
       const band=half=>{ const L=[],Rr=[];
         cl.forEach(q=>{ L.push({x:q.x+ey*half,y:q.y-ex*half}); Rr.push({x:q.x-ey*half,y:q.y+ex*half}); });
@@ -2703,6 +2768,10 @@ function drawChainPlan(){
       if(sel){ const m=RT({x:(A0.x+B0.x)/2,y:(A0.y+B0.y)/2});
         s+=`<text x="${TX(m.x).toFixed(1)}" y="${(TY(m.y)+3).toFixed(1)}" font-size="9" font-family="monospace" fill="var(--paper)" text-anchor="middle" font-weight="bold" paint-order="stroke" stroke="var(--ink)" stroke-width="2.6">${wl.name}</text>`; }
     });
+    // columns that land on the walls, with their level pads
+    if(sel && Q.pads) Q.pads.filter(pd=>pd.ok).forEach((pd,pk)=>{ const c=RT({x:pd.x,y:pd.y}), hs=0.5, lf=pk%2===0;
+      s+=`<rect x="${(TX(c.x)-hs*k).toFixed(1)}" y="${(TY(c.y)-hs*k).toFixed(1)}" width="${(2*hs*k).toFixed(1)}" height="${(2*hs*k).toFixed(1)}" fill="var(--paper)" stroke="var(--oxide)" stroke-width="1.2"/>`+
+         `<text x="${(lf?TX(c.x)-hs*k-3:TX(c.x)+hs*k+3).toFixed(1)}" y="${(TY(c.y)-hs*k-3).toFixed(1)}" text-anchor="${lf?'end':'start'}" font-size="8.5" font-family="monospace" fill="var(--oxide)" paint-order="stroke" stroke="var(--paper)" stroke-width="2.4">${esc(pd.name)} ${pd.top.toFixed(2)}</text>`; });
     // walking line with direction arrows
     const P=Q.path.map(p=>RT(p));
     if(sel){
@@ -2766,19 +2835,22 @@ function drawWallElev(){
     s+=`<path d="M${L(q=>q.grade)}" fill="none" stroke="var(--good)" stroke-width="1.3" stroke-dasharray="8 3"/>`;
     s+=`<text x="${(TX(P[P.length-1].t)+8).toFixed(1)}" y="${(TY(P[P.length-1].grade)+3).toFixed(1)}" font-size="9" font-family="monospace" fill="var(--good)">grade</text>`;
   } else s+=`<path d="M${L(q=>q.top)}" fill="none" stroke="var(--ink)" stroke-width="1.6"/>`;
-  const stw=wl.kind==='stair', surf=q=> stw ? R.z0 : q.top-Wd.curb;
+  const stw=wl.kind==='stair', surf=q=> stw ? R.z0 : (q.surf!=null ? q.surf : q.top-Wd.curb);
   s+=`<path d="M${L(surf)}" fill="none" stroke="var(--oxide)" stroke-width="1" stroke-dasharray="3 3"/>`;
   s+=`<text x="${(TX(P[P.length-1].t)+8).toFixed(1)}" y="${(TY(surf(P[P.length-1]))+3).toFixed(1)}" font-size="9" font-family="monospace" fill="var(--oxide)">${stw?'top of platform '+R.z0.toFixed(2):'ramp surface'}</text>`;
   // label the ends and the breaks that have room; close breaks keep only their leader line
   const show=new Set([0]); let lastX=TX(P[0].t);
-  for(let j=1;j<P.length-1;j++){ const xx=TX(P[j].t); if(xx-lastX>=110 && TX(P[P.length-1].t)-xx>=110){ show.add(j); lastX=xx; } }
+  let lastJ=0;
+  for(let j=1;j<P.length-1;j++){ const xx=TX(P[j].t);
+    if(xx-lastX<1 && P[j].pad && !P[lastJ].pad && lastJ>0){ show.delete(lastJ); show.add(j); lastJ=j; continue; }   // at a step, label the pad
+    if(xx-lastX>=110 && TX(P[P.length-1].t)-xx>=110){ show.add(j); lastX=xx; lastJ=j; } }
   if(TX(P[P.length-1].t)-TX(P[0].t)>=160) show.add(P.length-1);
   P.forEach((q,j)=>{
     const x=TX(q.t), anc=j===0?'start':j===P.length-1?'end':'middle';
     if(!show.has(j)){ s+=`<line x1="${x.toFixed(1)}" y1="${(TY(q.top)-4).toFixed(1)}" x2="${x.toFixed(1)}" y2="${((hasF?TY(q.ftgBot):TY(q.top))+4).toFixed(1)}" stroke="var(--ink-soft)" stroke-width="0.5" stroke-dasharray="2 2"/>`; return; }
     const lab=(y,txt,bold)=>`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${bold?9.5:8.5}" font-family="monospace" fill="var(--${bold?'ink':'ink-soft'})" text-anchor="${anc}"${bold?' font-weight="bold"':''} paint-order="stroke" stroke="var(--paper)" stroke-width="2.6">${txt}</text>`;
     s+=`<line x1="${x.toFixed(1)}" y1="${(TY(q.top)-4).toFixed(1)}" x2="${x.toFixed(1)}" y2="${((hasF?TY(q.ftgBot):TY(q.top))+4).toFixed(1)}" stroke="var(--ink-soft)" stroke-width="0.5" stroke-dasharray="2 2"/>`;
-    s+=lab(TY(q.top)-8,'TOW '+q.top.toFixed(2),true);
+    s+=lab(TY(q.top)-8,(q.pad?q.pad+' pad ':'TOW ')+q.top.toFixed(2),true);
     if(hasF){ s+=lab(TY(q.ftgTop)-4,'TOF '+q.ftgTop.toFixed(2)); s+=lab(TY(q.ftgBot)+13,'BOF '+q.ftgBot.toFixed(2));
       s+=lab((TY(q.top)+TY(q.ftgTop))/2+3,'h '+ftin(q.height)); }
   });

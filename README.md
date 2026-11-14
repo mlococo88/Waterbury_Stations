@@ -176,6 +176,9 @@ Each ramp or stair is a **chain** of segments that starts where it ties into the
 - End walls across a 180° turning landing, across the far end of a 90° corner (lining up with the next run's outside wall), and optionally across the bottom of the last run. At a 90° corner the wall on the turn side stops where the new run's wall picks up. The side of the top landing facing the platform is open.
 - Strip footing centred under the wall, default **3'-0" × 1'-6"** (11" toes, SP-214). **Footing bottom** either *level* (a set elevation, or frost depth below the lowest grade) or *follows grade* (frost depth below a straight-line grade from the top of the ramp to the bottom).
 - Collinear pieces merge into one wall; at each break the top follows the higher adjacent surface.
+- Walls meet square at corners: the wall that turns the corner runs to the outside face of the other, with no overhang.
+- **Column pads** — where a column lands on a wall, the top of wall is level over a pad. Each pad is placed by station and distance behind the platform back edge (it finds the wall under it), with a length and either a set elevation, a depth below the platform, or blank (level at the higher end, stepping down to the sloping top at the low end). A pad within 6" of a wall end runs to the end.
+- **Entry walls under the platform** — for a landing straight back from the platform, the side walls can start a set distance in front of the back edge.
 
 **Stair support walls** — one strip wall across the top of each stair, under the column carrying the stair. Top = platform − 1.125 ft (7" FRP + 4½" clear + 1" base plate + 1" grout, SP-312), length and grade at the wall as inputs, centreline 7½" behind the back edge (on SV-1) for back-edge stairs, at the platform end for end stairs.
 
