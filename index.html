@@ -628,7 +628,7 @@
   <div class="svgcard" style="margin-top:18px;">
     <div class="cap"><span>Wall elevation (developed, true scale)</span><span id="ch_wallpick" style="display:flex; gap:4px; flex-wrap:wrap;"></span>
       <span class="gctrl"><button data-sz="svg_chwall" data-a="in">+</button><button data-sz="svg_chwall" data-a="out">&minus;</button><button data-sz="svg_chwall" data-a="fit">Fit</button></span></div>
-    <svg id="svg_chwall" viewBox="0 0 1500 360"></svg>
+    <svg id="svg_chwall" viewBox="0 0 1500 560"></svg>
   </div>
   <h2 class="sec mt">Walls</h2>
   <div id="ch_walls" class="scroll"></div>
@@ -656,6 +656,7 @@
     <p class="cfg" style="flex-wrap:wrap; gap:14px;">
       <span><input type="checkbox" id="hm_sup" checked> <label for="hm_sup" style="margin:0;display:inline;">Support lines</label></span>
       <span><input type="checkbox" id="hm_beam" checked> <label for="hm_beam" style="margin:0;display:inline;">Beam lines</label></span>
+      <span><input type="checkbox" id="hm_ramp" checked> <label for="hm_ramp" style="margin:0;display:inline;">Ramps &amp; stairs (elevation)</label></span>
       <span><input type="checkbox" id="hm_ext" checked> <label for="hm_ext" style="margin:0;display:inline;">Mark high and low points</label></span>
     </p>
   </fieldset>
@@ -2865,50 +2866,136 @@ function drawWallElev(){
   if(!R||!R.walls||!R.walls.length){ svg.innerHTML=''; if(pick) pick.innerHTML='<span class="note">No walls on this one.</span>'; return; }
   if(WALL_SEL>=R.walls.length) WALL_SEL=0;
   if(pick) pick.innerHTML=R.walls.map((wl,j)=>`<button class="sm ${j===WALL_SEL?'':'ghost'}" onclick="wallPick(${j})">${wl.name}</button>`).join('');
-  const wl=R.walls[WALL_SEL], P=wl.pts, Wd=R.WALL;
-  const W=1500, H=360, padL=70, padR=170, padT=40, padB=54;
-  const t0=P[0].t, len=Math.max(0.5,P[P.length-1].t-t0);
-  const zs=[]; P.forEach(q=>{ zs.push(q.top); if(q.ftgBot!=null) zs.push(q.ftgBot,q.grade); });
-  const lo=Math.min(...zs)-0.6, hi=Math.max(...zs)+0.9;
-  const k=Math.min((W-padL-padR)/len,(H-padT-padB)/(hi-lo)), x0=padL+((W-padL-padR)-len*k)/2;
+  const wl=R.walls[WALL_SEL], P=wl.pts, Wd=R.WALL, N=P.length;
+  const stw=wl.kind==='stair', hasF=P.every(q=>q.ftgBot!=null), hasG=P.every(q=>q.grade!=null);
+  const surf=q=> stw ? R.z0 : (q.surf!=null ? q.surf : q.top-Wd.curb);
+  const t0=P[0].t, tN=P[N-1].t, len=Math.max(0.5,tN-t0);
+  const zs=[]; P.forEach(q=>{ zs.push(q.top, surf(q)); if(hasF) zs.push(q.ftgBot,q.ftgTop); if(hasG) zs.push(q.grade); });
+  const lo=Math.min(...zs), hi=Math.max(...zs);
+  // true scale; the frame grows to fit, with room for callouts above and dimensions around
+  const W=1500, padL=190, padR=190, padT=128, padB=150;
+  const k=Math.min((W-padL-padR)/len, 430/Math.max(hi-lo,1));
+  const H=Math.round(padT+padB+(hi-lo)*k);
+  svg.setAttribute('viewBox','0 0 '+W+' '+H);
+  const x0=padL+((W-padL-padR)-len*k)/2;
   const TX=t=>x0+(t-t0)*k, TY=z=>padT+(hi-z)*k;
-  const L=(f)=>P.map(q=>TX(q.t).toFixed(1)+','+TY(f(q)).toFixed(1)).join(' L');
-  const Lr=(f)=>P.slice().reverse().map(q=>TX(q.t).toFixed(1)+','+TY(f(q)).toFixed(1)).join(' L');
+  const F=v=>v.toFixed(1);
+  const FR=['','⅛','¼','⅜','½','⅝','¾','⅞'];
+  const fi=v=>{ let n=Math.round(Math.abs(v)*96); const ft=Math.floor(n/96); n-=ft*96; const inch=Math.floor(n/8), e=n-inch*8;
+    return (v<0?'-':'')+ft+"'-"+inch+(e?' '+FR[e]:'')+'"'; };
+  const L=(f)=>P.map(q=>F(TX(q.t))+','+F(TY(f(q)))).join(' L');
+  const Lr=(f)=>P.slice().reverse().map(q=>F(TX(q.t))+','+F(TY(f(q)))).join(' L');
+  const txt=(x,y,t,o={})=>`<text x="${F(x)}" y="${F(y)}" font-size="${o.fs||9}" font-family="monospace" fill="${o.c||'var(--ink)'}" text-anchor="${o.a||'middle'}"${o.b?' font-weight="bold"':''} paint-order="stroke" stroke="var(--paper)" stroke-width="2.6">${t}</text>`;
+  const tick=(x,y)=>`<line x1="${F(x-3.5)}" y1="${F(y+3.5)}" x2="${F(x+3.5)}" y2="${F(y-3.5)}" stroke="var(--ink)" stroke-width="1.1"/>`;
+  const hdim=(xa,xb,y,label,ya,yb)=>{ let r='';
+    if(ya!=null) r+=`<line x1="${F(xa)}" y1="${F(ya)}" x2="${F(xa)}" y2="${F(y+4)}" stroke="var(--ink-soft)" stroke-width="0.5"/>`;
+    if(yb!=null) r+=`<line x1="${F(xb)}" y1="${F(yb)}" x2="${F(xb)}" y2="${F(y+4)}" stroke="var(--ink-soft)" stroke-width="0.5"/>`;
+    r+=`<line x1="${F(xa)}" y1="${F(y)}" x2="${F(xb)}" y2="${F(y)}" stroke="var(--ink)" stroke-width="0.7"/>`+tick(xa,y)+tick(xb,y);
+    if(label && xb-xa>=34) r+=txt((xa+xb)/2,y-4,label,{fs:8.5});
+    return r; };
+  const vdim=(x,ya,yb,label,side)=>{ if(Math.abs(yb-ya)<2) return '';
+    let r=`<line x1="${F(x)}" y1="${F(ya)}" x2="${F(x)}" y2="${F(yb)}" stroke="var(--ink)" stroke-width="0.7"/>`+tick(x,ya)+tick(x,yb);
+    const xm=x+(side<0?-4:4)+(side<0?0:8), ym=(ya+yb)/2;
+    if(Math.abs(yb-ya)<label.length*5.4+6) r+=txt(x+(side<0?-5:5),ym+3,label,{fs:8,a:side<0?'end':'start'});
+    else { const xr=side<0?x+10:x-4;   // on the wall side of the line, clear of the elevation labels
+      r+=`<text x="${F(xr)}" y="${F(ym)}" font-size="8.5" font-family="monospace" fill="var(--ink)" text-anchor="middle" transform="rotate(-90 ${F(xr)} ${F(ym)})" paint-order="stroke" stroke="var(--paper)" stroke-width="2.6">${label}</text>`; }
+    return r; };
   let s='';
-  for(let zz=Math.ceil(lo);zz<=hi;zz++) s+=`<line x1="${padL}" y1="${TY(zz).toFixed(1)}" x2="${W-padR+20}" y2="${TY(zz).toFixed(1)}" stroke="var(--graphite)" stroke-width="0.4" opacity="0.35"/>`+
-    `<text x="${padL-6}" y="${(TY(zz)+3).toFixed(1)}" font-size="9" font-family="monospace" fill="var(--ink-soft)" text-anchor="end">${zz}</text>`;
-  const hasF=P.every(q=>q.ftgBot!=null);
+  // elevation grid
+  for(let zz=Math.ceil(lo-0.5);zz<=hi+0.5;zz++){ const y=TY(zz); if(y<padT-30||y>H-padB+30) continue;
+    s+=`<line x1="58" y1="${F(y)}" x2="${W-padR+100}" y2="${F(y)}" stroke="var(--graphite)" stroke-width="0.4" opacity="0.3"/>`+
+       `<text x="16" y="${F(y+3)}" font-size="8.5" font-family="monospace" fill="var(--graphite)" text-anchor="start">${zz}.00</text>`; }
+  // body: footing, stem, grade, walking surface
   if(hasF){
     s+=`<path d="M${L(q=>q.ftgTop)} L${Lr(q=>q.ftgBot)} Z" fill="rgba(28,26,23,.22)" stroke="var(--ink)" stroke-width="1"/>`;
-    s+=`<path d="M${L(q=>q.top)} L${Lr(q=>q.ftgTop)} Z" fill="rgba(28,26,23,.08)" stroke="var(--ink)" stroke-width="1.3"/>`;
-    s+=`<path d="M${L(q=>q.grade)}" fill="none" stroke="var(--good)" stroke-width="1.3" stroke-dasharray="8 3"/>`;
-    s+=`<text x="${(TX(P[P.length-1].t)+8).toFixed(1)}" y="${(TY(P[P.length-1].grade)+3).toFixed(1)}" font-size="9" font-family="monospace" fill="var(--good)">grade</text>`;
+    s+=`<path d="M${L(q=>q.top)} L${Lr(q=>q.ftgTop)} Z" fill="rgba(28,26,23,.08)" stroke="var(--ink)" stroke-width="1.4"/>`;
   } else s+=`<path d="M${L(q=>q.top)}" fill="none" stroke="var(--ink)" stroke-width="1.6"/>`;
-  const stw=wl.kind==='stair', surf=q=> stw ? R.z0 : (q.surf!=null ? q.surf : q.top-Wd.curb);
+  if(hasG){ s+=`<path d="M${F(TX(t0)-40)},${F(TY(P[0].grade))} L${L(q=>q.grade)} L${F(TX(tN)+40)},${F(TY(P[N-1].grade))}" fill="none" stroke="var(--good)" stroke-width="1.3" stroke-dasharray="8 3"/>`; }
   s+=`<path d="M${L(surf)}" fill="none" stroke="var(--oxide)" stroke-width="1" stroke-dasharray="3 3"/>`;
-  s+=`<text x="${(TX(P[P.length-1].t)+8).toFixed(1)}" y="${(TY(surf(P[P.length-1]))+3).toFixed(1)}" font-size="9" font-family="monospace" fill="var(--oxide)">${stw?'top of platform '+R.z0.toFixed(2):'ramp surface'}</text>`;
-  // label the ends and the breaks that have room; close breaks keep only their leader line
-  const show=new Set([0]); let lastX=TX(P[0].t);
-  let lastJ=0;
-  for(let j=1;j<P.length-1;j++){ const xx=TX(P[j].t);
-    if(xx-lastX<1 && P[j].pad && !P[lastJ].pad && lastJ>0){ show.delete(lastJ); show.add(j); lastJ=j; continue; }   // at a step, label the pad
-    if(xx-lastX>=110 && TX(P[P.length-1].t)-xx>=110){ show.add(j); lastX=xx; lastJ=j; } }
-  if(TX(P[P.length-1].t)-TX(P[0].t)>=160) show.add(P.length-1);
-  P.forEach((q,j)=>{
-    const x=TX(q.t), anc=j===0?'start':j===P.length-1?'end':'middle';
-    if(!show.has(j)){ s+=`<line x1="${x.toFixed(1)}" y1="${(TY(q.top)-4).toFixed(1)}" x2="${x.toFixed(1)}" y2="${((hasF?TY(q.ftgBot):TY(q.top))+4).toFixed(1)}" stroke="var(--ink-soft)" stroke-width="0.5" stroke-dasharray="2 2"/>`; return; }
-    const lab=(y,txt,bold)=>`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${bold?9.5:8.5}" font-family="monospace" fill="var(--${bold?'ink':'ink-soft'})" text-anchor="${anc}"${bold?' font-weight="bold"':''} paint-order="stroke" stroke="var(--paper)" stroke-width="2.6">${txt}</text>`;
-    s+=`<line x1="${x.toFixed(1)}" y1="${(TY(q.top)-4).toFixed(1)}" x2="${x.toFixed(1)}" y2="${((hasF?TY(q.ftgBot):TY(q.top))+4).toFixed(1)}" stroke="var(--ink-soft)" stroke-width="0.5" stroke-dasharray="2 2"/>`;
-    s+=lab(TY(q.top)-8,(q.pad?q.pad+' pad ':'TOW ')+q.top.toFixed(2),true);
-    if(hasF){ s+=lab(TY(q.ftgTop)-4,'TOF '+q.ftgTop.toFixed(2)); s+=lab(TY(q.ftgBot)+13,'BOF '+q.ftgBot.toFixed(2));
-      s+=lab((TY(q.top)+TY(q.ftgTop))/2+3,'h '+ftin(q.height)); }
-  });
-  const yd=H-14;
-  s+=`<line x1="${TX(P[0].t).toFixed(1)}" y1="${yd}" x2="${TX(P[P.length-1].t).toFixed(1)}" y2="${yd}" stroke="var(--ink-soft)" stroke-width="0.7"/>`+
-     `<text x="${((TX(P[0].t)+TX(P[P.length-1].t))/2).toFixed(1)}" y="${yd-4}" font-size="9" font-family="monospace" fill="var(--ink-soft)" text-anchor="middle">${ftin(len)} · ${esc(wl.desc)}</text>`;
-  const leg=[wl.name, ftin(Wd.t)+' wall', ftin(Wd.fw)+' × '+ftin(Wd.ft)+' footing', stw ? 'top '+(R.stairWall.below*12).toFixed(1)+'" below platform' : 'curb '+(Wd.curb*12).toFixed(1)+'" above ramp',
-    Wd.bofFix!=null ? 'footing level' : ftin(Wd.frost)+' grade to BOF', 'true scale'];
-  leg.forEach((t,j)=>{ s+=`<text x="${W-padR+30}" y="${padT+10+j*14}" font-size="${j?8.5:10}" font-family="monospace" fill="var(--${j?'ink-soft':'ink'})"${j?'':' font-weight="bold"'}>${t}</text>`; });
+
+  // elevation callouts above the wall at every end, break and pad, in rows so none overlap
+  const rowsEnd=[]; const ROWH=13;
+  const callTop=[];
+  const padsSeen={};
+  P.forEach((q,j)=>{ if(j>0 && Math.abs(q.t-P[j-1].t)<1e-4 && Math.abs(q.top-P[j-1].top)<1e-4) return;
+    if(q.pad){ if(padsSeen[q.pad]) return; padsSeen[q.pad]=1;
+      const ps=P.filter(r=>r.pad===q.pad), tm=(ps[0].t+ps[ps.length-1].t)/2;
+      callTop.push({x:TX(tm), y:TY(q.top), t:q.pad+' PAD '+q.top.toFixed(2), pad:true}); return; }
+    // the low end of a pad steps: label the sloping top there too
+    callTop.push({x:TX(q.t), y:TY(q.top), t:'TOW '+q.top.toFixed(2), pad:false}); });
+  callTop.sort((a,b)=>a.x-b.x);
+  callTop.forEach(c=>{ const w=c.t.length*5.6+8; let r=0;
+    while(rowsEnd[r]!=null && rowsEnd[r]>c.x-w/2) r++;
+    rowsEnd[r]=c.x+w/2; c.r=r; });
+  const yTopMin=Math.min(...P.map(q=>TY(q.top)));
+  callTop.forEach(c=>{ const yl=yTopMin-18-c.r*ROWH;
+    s+=`<line x1="${F(c.x)}" y1="${F(c.y-2)}" x2="${F(c.x)}" y2="${F(yl+3)}" stroke="var(--ink-soft)" stroke-width="0.5"/>`;
+    s+=`<circle cx="${F(c.x)}" cy="${F(c.y)}" r="1.8" fill="var(--ink)"/>`;
+    s+=txt(c.x,yl,c.t,{b:true,fs:9,c:c.pad?'var(--oxide)':'var(--ink)'}); });
+
+  // slope of each sloping stretch of top of wall
+  for(let j=0;j<N-1;j++){ const a=P[j], b=P[j+1], dt=b.t-a.t; if(dt<1.5) continue;
+    const dz=b.top-a.top; if(Math.abs(dz)<1e-3) { if(dt*k>90) s+=txt((TX(a.t)+TX(b.t))/2,(TY(a.top))+13,'LEVEL',{fs:8,c:'var(--ink-soft)'}); continue; }
+    const xm=(TX(a.t)+TX(b.t))/2, ym=(TY(a.top)+TY(b.top))/2, ang=Math.atan2(TY(b.top)-TY(a.top),TX(b.t)-TX(a.t))*180/Math.PI;
+    if(dt*k<120) continue;
+    s+=`<text x="${F(xm)}" y="${F(ym+13)}" font-size="8" font-family="monospace" fill="var(--ink-soft)" text-anchor="middle" transform="rotate(${ang.toFixed(2)} ${F(xm)} ${F(ym+13)})" paint-order="stroke" stroke="var(--paper)" stroke-width="2.4">TOW ${(Math.abs(dz)/dt*100).toFixed(2)}% (1:${(dt/Math.abs(dz)).toFixed(2)})</text>`; }
+
+  // curb: walking surface to top of wall, at the middle of the longest sloping stretch
+  if(!stw){ let jb=-1, best=0; for(let j=0;j<N-1;j++){ const dt=P[j+1].t-P[j].t; if(dt>best && !P[j].pad && !P[j+1].pad){best=dt; jb=j;} }
+    if(jb>=0){ const a=P[jb], b=P[jb+1], tm=(a.t+b.t)/2, f=(tm-a.t)/(b.t-a.t), zt=a.top+(b.top-a.top)*f, zsf=surf(a)+(surf(b)-surf(a))*f;
+      s+=vdim(TX(tm)+70, TY(zt), TY(zsf), ((zt-zsf)*12).toFixed(0)+'" CURB', 1);
+      s+=`<line x1="${F(TX(tm))}" y1="${F(TY(zt))}" x2="${F(TX(tm)+74)}" y2="${F(TY(zt))}" stroke="var(--ink-soft)" stroke-width="0.4"/>`+
+         `<line x1="${F(TX(tm))}" y1="${F(TY(zsf))}" x2="${F(TX(tm)+74)}" y2="${F(TY(zsf))}" stroke="var(--ink-soft)" stroke-width="0.4"/>`; } }
+
+  // ends: grade, top of footing and bottom of footing elevations, and vertical dimension chains
+  [[0,-1],[N-1,1]].forEach(([j,sd])=>{ const q=P[j], xe=TX(q.t);
+    const xa=xe+sd*28, xb=xe+sd*84;               // inner chain, outer chain
+    const ext=(z)=>`<line x1="${F(xe+sd*3)}" y1="${F(TY(z))}" x2="${F(xb+sd*4)}" y2="${F(TY(z))}" stroke="var(--ink-soft)" stroke-width="0.4"/>`;
+    s+=ext(q.top);
+    if(hasF){ s+=ext(q.ftgTop)+ext(q.ftgBot);
+      if(hasG && q.grade<q.top && q.grade>q.ftgTop){ s+=ext(q.grade);
+        s+=vdim(xa,TY(q.top),TY(q.grade),fi(q.top-q.grade),sd);
+        s+=vdim(xa,TY(q.grade),TY(q.ftgTop),fi(q.grade-q.ftgTop),sd);
+      } else s+=vdim(xa,TY(q.top),TY(q.ftgTop),fi(q.top-q.ftgTop),sd);
+      s+=vdim(xa,TY(q.ftgTop),TY(q.ftgBot),fi(q.ftgTop-q.ftgBot),sd);
+      s+=vdim(xb,TY(q.top),TY(q.ftgBot),fi(q.top-q.ftgBot),sd);
+      const xt=xb+sd*10, an=sd<0?'end':'start';
+      s+=txt(xt,TY(q.top)+3,'TOW '+q.top.toFixed(2),{a:an,fs:8.5,b:true});
+      if(hasG) s+=txt(xt,TY(q.grade)+3,'GR '+q.grade.toFixed(2),{a:an,fs:8.5,c:'var(--good)'});
+      s+=txt(xt,TY(q.ftgTop)+3,'TOF '+q.ftgTop.toFixed(2),{a:an,fs:8.5});
+      s+=txt(xt,TY(q.ftgBot)+3,'BOF '+q.ftgBot.toFixed(2),{a:an,fs:8.5});
+    } });
+
+  // bottom of footing at every break when it slopes; one note when it is level
+  const yF=hasF?Math.max(...P.map(q=>TY(q.ftgBot))):Math.max(...P.map(q=>TY(q.top)));
+  if(hasF){ const level=P.every(q=>Math.abs(q.ftgBot-P[0].ftgBot)<1e-4);
+    if(level) s+=txt((TX(t0)+TX(tN))/2, TY(P[0].ftgBot)+13, 'BOTTOM OF FOOTING LEVEL AT '+P[0].ftgBot.toFixed(2), {fs:8.5,c:'var(--ink-soft)'});
+    else P.forEach((q,j)=>{ if(j===0||j===N-1) return; s+=txt(TX(q.t),TY(q.ftgBot)+13,'BOF '+q.ftgBot.toFixed(2),{fs:8}); }); }
+
+  // horizontal dimension chains: each stretch, then overall
+  const brkA=[], brkB=[];   // first and last point at each distinct position (a step has two)
+  P.forEach(q=>{ if(!brkA.length || q.t-brkA[brkA.length-1].t>1e-3){ brkA.push(q); brkB.push(q); } else brkB[brkB.length-1]=q; });
+  const brk=brkA;
+  const y1=yF+34, y2=yF+58, y3=yF+82;
+  for(let j=0;j<brk.length-1;j++){ const a=brk[j], b=brk[j+1];
+    s+=hdim(TX(a.t),TX(b.t),y1,fi(b.t-a.t), j===0?TY(a.top)+2:yF+4, TY(b.top)+2); }
+  // stretch descriptions: pads and sloping / level parts
+  for(let j=0;j<brk.length-1;j++){ const a=brkB[j], b=brkA[j+1], w=TX(b.t)-TX(a.t); if(w<60) continue;
+    const isPad=a.pad && b.pad && a.pad===b.pad;
+    const lab=isPad? a.pad+' PAD' : (Math.abs(b.top-a.top)<1e-3?'LEVEL':'SLOPED');
+    s+=txt((TX(a.t)+TX(b.t))/2,y1+12,lab,{fs:7.5,c:isPad?'var(--oxide)':'var(--ink-soft)'}); }
+  s+=hdim(TX(t0),TX(tN),y2,fi(len)+' OVERALL',null,null);
+  s+=txt((TX(t0)+TX(tN))/2,y3,`${wl.name} · ${esc(wl.desc)}`,{fs:9.5,b:true});
+
+  // legend, one line across the top
+  const leg=[fi(Wd.t)+' wall', fi(Wd.fw)+' \u00d7 '+fi(Wd.ft)+' footing',
+    stw ? 'top '+(R.stairWall.below*12).toFixed(1)+'" below platform' : 'curb '+(Wd.curb*12).toFixed(1)+'" above walking surface',
+    Wd.bofFix!=null ? 'footing level' : fi(Wd.frost)+' grade to BOF', 'true scale'];
+  s+=`<text x="16" y="22" font-size="11" font-family="monospace" fill="var(--ink)" font-weight="bold">${wl.name}</text>`+
+     `<text x="52" y="22" font-size="9" font-family="monospace" fill="var(--ink-soft)">${leg.join('  \u00b7  ')}</text>`;
+  [['var(--oxide)','3 3',stw?'top of platform':'walking surface'],['var(--good)','8 3','grade']].forEach((kk,j)=>{ const xx=16+j*150, yy=40;
+    s+=`<line x1="${xx}" y1="${yy-3}" x2="${xx+26}" y2="${yy-3}" stroke="${kk[0]}" stroke-width="1.2" stroke-dasharray="${kk[1]}"/>`+
+       `<text x="${xx+32}" y="${yy}" font-size="8.5" font-family="monospace" fill="var(--ink-soft)">${kk[2]}</text>`; });
   svg.innerHTML=svgWrap('svg_chwall',s,W,H);
 }
 function renderWallTable(){
@@ -2960,6 +3047,41 @@ function divAt(v,m){
              : hexLerp(HM_MID, rampAt(HM_DIV_HI, t), Math.min(1,t*4));
 }
 let HM_GRID=null;
+// Ramps and stairs for the heat map, in station / offset-behind-the-edge terms. The
+// conversion uses the track direction at each chain's tie-in, which is exact on a
+// tangent and close enough on the gentle curves platforms sit on.
+function heatRamps(){
+  const C=ENG.C, out=[];
+  CHAINS.forEach((ch,ci)=>{
+    let R; try{ R=computeChain(ch); }catch(e){ return; }
+    if(!R || R.sta==null) return;
+    const P0=ENG.platPt(R.sta,C.W,0), P1=ENG.platPt(R.sta,C.W+1,0), Pa=ENG.platPt(R.sta+1,C.W,0);
+    const ux=P1.x-P0.x, uy=P1.y-P0.y, tx=Pa.x-P0.x, ty=Pa.y-P0.y;
+    const SO=q=>({s:R.sta+(q.x-P0.x)*tx+(q.y-P0.y)*ty, o:C.W+(q.x-P0.x)*ux+(q.y-P0.y)*uy});
+    const L=(a,b,f)=>({x:a.x+(b.x-a.x)*f, y:a.y+(b.y-a.y)*f});
+    const cells=[], cont=[], walls=[];
+    R.foot.forEach(f=>{
+      if(f.z1==null) return;
+      const P=f.p, len=Math.hypot(P[1].x-P[0].x,P[1].y-P[0].y);
+      const strip=(f0,f1,z,what)=>cells.push({q:[L(P[0],P[1],f0),L(P[0],P[1],f1),L(P[3],P[2],f1),L(P[3],P[2],f0)].map(SO), z, what});
+      if(f.kind==='land') strip(0,1,f.z1,'landing');
+      else if(f.kind==='run'){ const n=Math.max(1,Math.ceil(len/1));
+        for(let k=0;k<n;k++) strip(k/n,(k+1)/n,f.z1+(f.z2-f.z1)*(k+0.5)/n,'ramp');
+        cont.push({P:P.map(SO), z1:f.z1, z2:f.z2}); }
+      else if(f.kind==='stair'){ const g=R.segs.find(q=>q.i===f.seg); if(!g||len<1e-6) return;
+        const sk=(g.treadsN===g.n?0:1);
+        for(let k=0;k<g.treadsN;k++) strip(k*g.td/len,Math.min(1,(k+1)*g.td/len),f.z1-(k+sk)*g.riser,'tread '+(k+1)); }
+    });
+    (R.walls||[]).forEach(wl=>{ const A=wl.pts[0], B=wl.pts[wl.pts.length-1];
+      let wx=B.x-A.x, wy=B.y-A.y; const m=Math.hypot(wx,wy); if(m<1e-6) return; wx/=m; wy/=m;
+      const nx=-wy*R.WALL.t/2, ny=wx*R.WALL.t/2;
+      walls.push({name:wl.name, q:[{x:A.x+nx,y:A.y+ny},{x:B.x+nx,y:B.y+ny},{x:B.x-nx,y:B.y-ny},{x:A.x-nx,y:A.y-ny}].map(SO)}); });
+    const zs=cells.map(c=>c.z);
+    out.push({name:ch.name||('Chain '+(ci+1)), cells, cont, walls, top:R.z0, bottom:R.bottom?R.bottom.z:null,
+      zmin:zs.length?Math.min(...zs):null, zmax:zs.length?Math.max(...zs):null});
+  });
+  return out;
+}
 function drawHeat(){
   const svg=document.getElementById('svg_heat'); if(!svg||!ENG) return;
   const C=ENG.C, metric=g('hm_metric');
@@ -2967,11 +3089,19 @@ function drawHeat(){
   if(!(s1>s0) || !(C.W>0)){ svg.innerHTML=''; return; }
   const NX=Math.max(20,Math.min(400,Math.round(gn('hm_nx')||120)));
   const NY=Math.max(2,Math.min(48,Math.round(gn('hm_ny')||12)));
+  // ramps and stairs widen the frame: further back, and past the platform ends
+  const RAMPS = (metric==='elev' && gb('hm_ramp') && CHAINS.length) ? heatRamps() : [];
+  let sA=s0, sB=s1, oMax=C.W;
+  RAMPS.forEach(r=>{ r.cells.concat(r.walls).forEach(c=>c.q.forEach(q=>{ sA=Math.min(sA,q.s-2); sB=Math.max(sB,q.s+2); oMax=Math.max(oMax,q.o+1.5); })); });
   const W=1200, padL=70, padR=24, padT=40, padB=88;
-  const H=Math.round(Math.max(260, Math.min(520, padT+padB+NY*16)));
+  let bandH=Math.max(180, Math.min(432, NY*16));            // the platform band
+  let ky=bandH/C.W;
+  if(oMax>C.W && oMax*ky>620){ ky=620/oMax; bandH=ky*C.W; }
+  const ph=Math.round(oMax*ky);
+  const H=Math.round(Math.max(260, padT+padB+ph));
   svg.setAttribute('viewBox','0 0 '+W+' '+H);
-  const pw=W-padL-padR, ph=H-padT-padB;
-  const TX=s=>padL+(s-s0)/(s1-s0)*pw, TY=w=>padT+(w/C.W)*ph;
+  const pw=W-padL-padR;
+  const TX=s=>padL+(s-sA)/(sB-sA)*pw, TY=w=>padT+w*ky;
 
   // sample at cell centres
   const val=(s,w)=>{
@@ -2991,24 +3121,37 @@ function drawHeat(){
     for(let i=0;i<=FX;i++){ const st=s0+i/FX*(s1-s0);
       for(let j=0;j<=FY;j++){ const w=j/FY*C.W, v=val(st,w);
         if(v<lo){lo=v;loAt={s:st,w};} if(v>hi){hi=v;hiAt={s:st,w};} } } }
+  const plo=lo, phi=hi;                                        // platform-only extremes, for the stats
+  RAMPS.forEach(r=>r.cells.forEach(c=>{ lo=Math.min(lo,c.z); hi=Math.max(hi,c.z); }));
   HM_GRID={grid,NX,NY,s0,s1,metric,lo,hi};
 
   const span=Math.max(hi-lo,1e-9), dm=Math.max(Math.abs(lo),Math.abs(hi));
   const colour = metric==='dev' ? (v=>divAt(v,dm)) : (v=>rampAt(HM_SEQ,(v-lo)/span));
-  const cw=pw/NX, chh=ph/NY;
+  const xp0=TX(s0), xp1=TX(s1), bw=xp1-xp0, cw=bw/NX, chh=bandH/NY;
   let s='';
   s+=`<rect x="${padL}" y="${padT}" width="${pw}" height="${ph}" fill="var(--paper)"/>`;
   for(let j=0;j<NY;j++) for(let i=0;i<NX;i++){
-    s+=`<rect x="${(padL+i*cw).toFixed(2)}" y="${(padT+j*chh).toFixed(2)}" width="${(cw+0.35).toFixed(2)}" height="${(chh+0.35).toFixed(2)}" fill="${colour(grid[j][i])}"/>`;
+    s+=`<rect x="${(xp0+i*cw).toFixed(2)}" y="${(padT+j*chh).toFixed(2)}" width="${(cw+0.35).toFixed(2)}" height="${(chh+0.35).toFixed(2)}" fill="${colour(grid[j][i])}"/>`;
   }
+  // ramps and stairs, on the same colour scale; walls in grey around them
+  const SP=q=>TX(q.s).toFixed(1)+','+TY(q.o).toFixed(1);
+  const hovR=[];
+  RAMPS.forEach(r=>{
+    r.cells.forEach(c=>{ s+=`<path d="M${c.q.map(SP).join(' L')} Z" fill="${colour(c.z)}" stroke="${colour(c.z)}" stroke-width="0.5"/>`;
+      hovR.push({pts:c.q.map(q=>({x:TX(q.s),y:TY(q.o)})), z:c.z, name:r.name, what:c.what}); });
+    r.walls.forEach(w=>{ s+=`<path d="M${w.q.map(SP).join(' L')} Z" fill="var(--graphite)" opacity="0.75"/>`; });
+    if(r.cells.length){ const c0=r.cells[0].q[0];
+      s+=`<text x="${(TX(c0.s)).toFixed(1)}" y="${(TY(c0.o)-4).toFixed(1)}" font-size="9" font-family="monospace" fill="var(--ink)" paint-order="stroke" stroke="var(--paper)" stroke-width="2.6">${esc(r.name)}</text>`; }
+  });
 
   // contours: marching squares on the fine sample grid, elevation only
-  const ci=gn('hm_ci');
-  if(metric==='elev' && ci>0 && span/ci<=60){
+  // contour interval: as set, coarsened (in whole multiples) when the ramps stretch the range
+  const ci0=gn('hm_ci'), ci = ci0>0 ? ci0*Math.max(1,Math.ceil(span/ci0/60)) : 0;
+  if(metric==='elev' && ci>0){
     const GX=Math.min(240,NX*2), GY=Math.max(6,NY*2);
     const Z=[]; for(let j=0;j<=GY;j++){ const w=j/GY*C.W, r=[];
       for(let i=0;i<=GX;i++) r.push(ENG.surfElev(s0+i/GX*(s1-s0),w)); Z.push(r); }
-    const px=i=>padL+i/GX*pw, py=j=>padT+j/GY*ph;
+    const px=i=>xp0+i/GX*bw, py=j=>padT+j/GY*bandH;
     const segs=[];
     for(let lev=Math.ceil(lo/ci)*ci; lev<=hi+1e-9; lev+=ci){
       let d='';
@@ -3021,13 +3164,20 @@ function drawHeat(){
         if(hits.length>=2) d+=`M${hits[0][0].toFixed(1)},${hits[0][1].toFixed(1)} L${hits[1][0].toFixed(1)},${hits[1][1].toFixed(1)} `;
         if(hits.length===4) d+=`M${hits[2][0].toFixed(1)},${hits[2][1].toFixed(1)} L${hits[3][0].toFixed(1)},${hits[3][1].toFixed(1)} `;
       }
+      // across each ramp run, where the run passes through this elevation
+      RAMPS.forEach(r=>r.cont.forEach(c=>{ if((c.z1-lev)*(c.z2-lev)>=0) return;
+        const f=(c.z1-lev)/(c.z1-c.z2), P=c.P, a={s:P[0].s+(P[1].s-P[0].s)*f, o:P[0].o+(P[1].o-P[0].o)*f}, b={s:P[3].s+(P[2].s-P[3].s)*f, o:P[3].o+(P[2].o-P[3].o)*f};
+        d+=`M${SP(a)} L${SP(b)} `; }));
       if(d){ const major=Math.abs(lev/(ci*5)-Math.round(lev/(ci*5)))<1e-6;
         s+=`<path d="${d}" fill="none" stroke="var(--ink)" stroke-width="${major?1.1:0.55}" opacity="${major?0.75:0.45}"/>`;
         segs.push({lev,d,major}); }
     }
     // label major contours at the middle of the platform where they cross mid-width
+    const placed=[];
     segs.filter(q=>q.major).forEach(q=>{
       const m=q.d.match(/M([\d.]+),([\d.]+)/); if(!m) return;
+      if(placed.some(p2=>Math.abs(p2[0]-(+m[1]))<52 && Math.abs(p2[1]-(+m[2]))<14)) return;
+      placed.push([+m[1],+m[2]]);
       s+=`<text x="${(+m[1]).toFixed(1)}" y="${(+m[2]-3).toFixed(1)}" font-size="8.5" font-family="monospace" fill="var(--ink)" text-anchor="middle" paint-order="stroke" stroke="var(--paper)" stroke-width="2.4">${q.lev.toFixed(2)}</text>`;
     });
   }
@@ -3035,21 +3185,23 @@ function drawHeat(){
   // beam lines
   if(gb('hm_beam')) BEAMS.forEach(bm=>{ const y=TY(+bm.off);
     if(y<padT||y>padT+ph) return;
-    s+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${padL+pw}" y2="${y.toFixed(1)}" stroke="var(--ink)" stroke-width="0.8" stroke-dasharray="6 3" opacity="0.6"/>`;
+    s+=`<line x1="${xp0.toFixed(1)}" y1="${y.toFixed(1)}" x2="${xp1.toFixed(1)}" y2="${y.toFixed(1)}" stroke="var(--ink)" stroke-width="0.8" stroke-dasharray="6 3" opacity="0.6"/>`;
     s+=`<text x="${padL-6}" y="${(y+3).toFixed(1)}" font-size="8.5" font-family="monospace" fill="var(--ink-soft)" text-anchor="end">${esc(bm.lab)}</text>`; });
   // support lines
   const B=ENG.bents();
   if(gb('hm_sup')) B.forEach(b=>{ if(b.sta<s0||b.sta>s1) return; const x=TX(b.sta);
-    s+=`<line x1="${x.toFixed(1)}" y1="${padT}" x2="${x.toFixed(1)}" y2="${padT+ph}" stroke="var(--paper)" stroke-width="2"/>`;
-    s+=`<line x1="${x.toFixed(1)}" y1="${padT}" x2="${x.toFixed(1)}" y2="${padT+ph}" stroke="var(--ink)" stroke-width="0.8"/>`;
+    s+=`<line x1="${x.toFixed(1)}" y1="${padT}" x2="${x.toFixed(1)}" y2="${padT+bandH}" stroke="var(--paper)" stroke-width="2"/>`;
+    s+=`<line x1="${x.toFixed(1)}" y1="${padT}" x2="${x.toFixed(1)}" y2="${padT+bandH}" stroke="var(--ink)" stroke-width="0.8"/>`;
     s+=`<text x="${x.toFixed(1)}" y="${padT-6}" font-size="8.5" font-family="monospace" fill="var(--ink-soft)" text-anchor="middle">${esc(b.name)}</text>`; });
 
   // frame, edge labels, axes
-  s+=`<rect x="${padL}" y="${padT}" width="${pw}" height="${ph}" fill="none" stroke="var(--ink)" stroke-width="1"/>`;
+  s+=`<rect x="${xp0.toFixed(1)}" y="${padT}" width="${bw.toFixed(1)}" height="${bandH.toFixed(1)}" fill="none" stroke="var(--ink)" stroke-width="1"/>`;
+  if(RAMPS.length) s+=`<rect x="${padL}" y="${padT}" width="${pw}" height="${ph}" fill="none" stroke="var(--graphite)" stroke-width="0.6" stroke-dasharray="3 3"/>`;
   s+=`<text x="${padL-6}" y="${padT+4}" font-size="9" font-family="monospace" fill="var(--oxide)" text-anchor="end">edge</text>`;
-  s+=`<text x="${padL-6}" y="${padT+ph}" font-size="9" font-family="monospace" fill="var(--cyan)" text-anchor="end">back</text>`;
+  s+=`<text x="${padL-6}" y="${(padT+bandH).toFixed(1)}" font-size="9" font-family="monospace" fill="var(--cyan)" text-anchor="end">back</text>`;
+  if(RAMPS.length) s+=`<text x="${padL-6}" y="${padT+ph}" font-size="9" font-family="monospace" fill="var(--ink-soft)" text-anchor="end">+${(oMax-C.W).toFixed(0)} ft</text>`;
   const ticks=Math.max(2,Math.min(10,Math.round(pw/120)));
-  for(let k=0;k<=ticks;k++){ const st=s0+(s1-s0)*k/ticks, x=TX(st);
+  for(let k=0;k<=ticks;k++){ const st=sA+(sB-sA)*k/ticks, x=TX(st);
     s+=`<line x1="${x.toFixed(1)}" y1="${padT+ph}" x2="${x.toFixed(1)}" y2="${padT+ph+4}" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
     s+=`<text x="${x.toFixed(1)}" y="${padT+ph+15}" font-size="8.5" font-family="monospace" fill="var(--ink-soft)" text-anchor="middle">${formatStation(st,0)}</text>`; }
 
@@ -3060,7 +3212,7 @@ function drawHeat(){
              `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5" fill="none" stroke="var(--ink)" stroke-width="1.6"/>`+
              `<text x="${(x+(x>padL+pw-90?-9:9)).toFixed(1)}" y="${(y+(y<padT+14?12:-7)).toFixed(1)}" font-size="9" font-family="monospace" fill="var(--ink)" text-anchor="${x>padL+pw-90?'end':'start'}" font-weight="bold" paint-order="stroke" stroke="var(--paper)" stroke-width="2.6">${lab} ${val2}</text>`; };
     const fmt=v=>metric==='elev'?v.toFixed(3):metric==='dev'?((v*12>=0?'+':'')+(v*12).toFixed(3)+'"'):(v.toFixed(3)+'%');
-    s+=mk(hiAt,'HIGH',fmt(hi))+mk(loAt,'LOW',fmt(lo));
+    s+=mk(hiAt,'HIGH',fmt(phi))+mk(loAt,'LOW',fmt(plo));       // platform extremes; ramps report theirs below
   }
 
   // legend: a gradient bar with its true range
@@ -3075,12 +3227,12 @@ function drawHeat(){
   s+=`<text x="${lx}" y="${ly+lh+12}" font-size="9" font-family="monospace" fill="var(--ink-soft)" text-anchor="start">${lv(lL)}${unit}</text>`;
   if(metric==='dev') s+=`<text x="${lx+lw/2}" y="${ly+lh+12}" font-size="9" font-family="monospace" fill="var(--ink-soft)" text-anchor="middle">0 (on target)</text>`;
   s+=`<text x="${lx+lw}" y="${ly+lh+12}" font-size="9" font-family="monospace" fill="var(--ink-soft)" text-anchor="end">${lv(lR)}${unit}</text>`;
-  const ttl={elev:'Top of platform elevation',dev:'Height above rail minus target, at the edge',run:'Running slope along the platform'}[metric];
-  s+=`<text x="${lx}" y="${ly-6}" font-size="9" font-family="monospace" fill="var(--ink)" text-anchor="start">${ttl}${metric==='elev'&&ci>0?' · contours every '+ci+' ft':''}</text>`;
+  const ttl={elev:RAMPS.length?'Top of platform, ramp and stair elevation':'Top of platform elevation',dev:'Height above rail minus target, at the edge',run:'Running slope along the platform'}[metric];
+  s+=`<text x="${lx}" y="${ly-6}" font-size="9" font-family="monospace" fill="var(--ink)" text-anchor="start">${ttl}${metric==='elev'&&ci>0?' · contours every '+(+ci.toFixed(3))+' ft':''}</text>`;
   s+=`<text x="${padL+pw}" y="${H-10}" font-size="8" font-family="monospace" fill="var(--graphite)" text-anchor="end">unrolled along the track · not to scale across</text>`;
 
   svg.innerHTML=svgWrap('svg_heat',s,W,H);
-  svg._hm={padL,padT,pw,ph,W,H,cw,chh,s0,s1};
+  svg._hm={padL,padT,pw,ph,W,H,cw,chh,s0,s1,sA,sB,ky,bandH,hovR};
 
   const n=document.getElementById('hm_note');
   if(n) n.textContent=formatStation(s0)+' to '+formatStation(s1)+' · '+NX+' × '+NY+' cells';
@@ -3088,9 +3240,10 @@ function drawHeat(){
   if(st){
     const rows=[];
     if(metric==='elev'){
-      rows.push(['Highest top of platform', hi.toFixed(3)+' ft', formatStation(hiAt.s)+', '+hiAt.w.toFixed(2)+' ft back']);
-      rows.push(['Lowest top of platform', lo.toFixed(3)+' ft', formatStation(loAt.s)+', '+loAt.w.toFixed(2)+' ft back']);
-      rows.push(['Range', (hi-lo).toFixed(3)+' ft', ((hi-lo)*12).toFixed(2)+' in over the whole surface']);
+      rows.push(['Highest top of platform', phi.toFixed(3)+' ft', formatStation(hiAt.s)+', '+hiAt.w.toFixed(2)+' ft back']);
+      rows.push(['Lowest top of platform', plo.toFixed(3)+' ft', formatStation(loAt.s)+', '+loAt.w.toFixed(2)+' ft back']);
+      rows.push(['Range', (phi-plo).toFixed(3)+' ft', ((phi-plo)*12).toFixed(2)+' in over the platform surface']);
+      RAMPS.forEach(r=>{ if(r.zmax!=null) rows.push([r.name, r.zmax.toFixed(3)+' to '+r.zmin.toFixed(3)+' ft', 'top '+r.top.toFixed(3)+(r.bottom!=null?', bottom '+r.bottom.toFixed(3):'')]); });
     } else if(metric==='dev'){
       rows.push(['Furthest above target', '+'+(Math.max(hi,0)*12).toFixed(3)+' in', formatStation(hiAt.s)]);
       rows.push(['Furthest below target', (Math.min(lo,0)*12).toFixed(3)+' in', formatStation(loAt.s)]);
@@ -3108,7 +3261,7 @@ function drawHeat(){
 }
 function bindHeat(){
   const svg=document.getElementById('svg_heat'); if(!svg||svg._hb) return; svg._hb=true;
-  ['hm_metric','hm_nx','hm_ny','hm_ci','hm_sup','hm_beam','hm_ext'].forEach(id=>{
+  ['hm_metric','hm_nx','hm_ny','hm_ci','hm_sup','hm_beam','hm_ext','hm_ramp'].forEach(id=>{
     const e=document.getElementById(id); if(e) e.addEventListener('input',drawHeat); });
   const box=document.getElementById('hovbox');
   svg.addEventListener('mousemove',e=>{
@@ -3116,7 +3269,13 @@ function bindHeat(){
     const r=svg.getBoundingClientRect(), v=svgView('svg_heat');
     const sx=((e.clientX-r.left)*m.W/r.width - v.Px)/v.Z, sy=((e.clientY-r.top)*m.H/r.height - v.Py)/v.Z;
     if(sx<m.padL||sx>m.padL+m.pw||sy<m.padT||sy>m.padT+m.ph){ box.style.display='none'; return; }
-    const C=ENG.C, st=m.s0+(sx-m.padL)/m.pw*(m.s1-m.s0), w=(sy-m.padT)/m.ph*C.W;
+    const inPoly=(P)=>{ let c=false; for(let i=0,j=P.length-1;i<P.length;j=i++){ const a=P[i], b=P[j];
+      if(((a.y>sy)!==(b.y>sy)) && sx<(b.x-a.x)*(sy-a.y)/((b.y-a.y)||1e-9)+a.x) c=!c; } return c; };
+    const hr=(m.hovR||[]).find(h=>inPoly(h.pts));
+    if(hr){ box.textContent=hr.name+'\n'+hr.what+'\nTOP  '+hr.z.toFixed(3)+' ft';
+      box.style.display='block'; box.style.left=(e.clientX+14)+'px'; box.style.top=(e.clientY+14)+'px'; return; }
+    const C=ENG.C, st=m.sA+(sx-m.padL)/m.pw*(m.sB-m.sA), w=(sy-m.padT)/m.ky;
+    if(st<m.s0||st>m.s1||w<0||w>C.W){ box.style.display='none'; return; }
     const z=ENG.surfElev(st,w), dv=(ENG.heightAboveRail(st)-C.V)*12, rs=ENG.runSlopeAt(st);
     box.textContent='sta '+formatStation(st)+'\n'+w.toFixed(2)+' ft back from edge\nTOP  '+z.toFixed(3)+' ft\nvs target '+(dv>=0?'+':'')+dv.toFixed(3)+' in\nrunning   '+rs.toFixed(3)+' %';
     box.style.display='block'; box.style.left=(e.clientX+14)+'px'; box.style.top=(e.clientY+14)+'px';
@@ -3961,7 +4120,7 @@ const FIELDS=['hm_metric','hm_nx','hm_ny','hm_ci','notes_txt','calc_dec','t_staf
   's_piledatum','s_pileembed_in','s_piledia_in',
   'lim_xs','lim_run','lim_vgap','lim_hgap','lim_vmin','lim_vmax','lim_cant','o_int','o_dec','o_extra','val_in',
   'b_first','b_last','b_count','b_cantA','b_cantB','plan_rot'];
-const CHECKS=['hm_sup','hm_beam','hm_ext','p_widen','s_ped','s_pile','o_coords','o_beams','b_normal','sec_dims','sec_dims2','sec_dims3',
+const CHECKS=['hm_sup','hm_beam','hm_ext','hm_ramp','p_widen','s_ped','s_pile','o_coords','o_beams','b_normal','sec_dims','sec_dims2','sec_dims3',
   'v3d_plat','v3d_tact','v3d_beam','v3d_cap','v3d_pile_s','v3d_ped','v3d_col','v3d_ramp','v3d_rwall','v3d_rail','v3d_grnd','v3d_lab','v3d_edge'];
 let CURNAME=null;
 

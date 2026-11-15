@@ -182,11 +182,13 @@ Each ramp or stair is a **chain** of segments that starts where it ties into the
 
 **Stair support walls** — one strip wall across the top of each stair, under the column carrying the stair. Top = platform − 1.125 ft (7" FRP + 4½" clear + 1" base plate + 1" grout, SP-312), length and grade at the wall as inputs, centreline 7½" behind the back edge (on SV-1) for back-edge stairs, at the platform end for end stairs.
 
-**Outputs** — walls in plan with footing outlines; a developed true-scale elevation of any wall (top of wall, walking surface or platform, grade, top and bottom of footing, height at every break); a summary table and a per-wall table with centreline coordinates. Checks flag a wall top less than the curb above grade, a footing with less than frost cover, and a footing bottom sloping more than 10%.
+**Outputs** — walls in plan with footing outlines; a developed true-scale elevation of any wall, dimensioned: top of wall at every end, break and pad, slope of each sloping stretch, curb, a vertical chain at each end (exposed height, cover to footing, footing thickness, overall height) with TOW/grade/TOF/BOF elevations, a horizontal chain of every stretch (pads, sloped, level) and the overall length, in feet and inches to the nearest ⅛" (top of wall, walking surface or platform, grade, top and bottom of footing, height at every break); a summary table and a per-wall table with centreline coordinates. Checks flag a wall top less than the curb above grade, a footing with less than frost cover, and a footing bottom sloping more than 10%.
 
 Ramps, stairs and walls show in the 3D view (layers *Ramps & stairs* and *Ramp & stair walls*: ramp slabs, stair treads on stringers, walls with their level pads, and footings). They are not yet in the framing plan, heat map or Calculations tab. They save with the platform (Library / Export JSON).
 
 ### Heat map
+With *Ramps & stairs* ticked (elevation only), ramp runs, landings and stair treads are drawn behind the platform on the same colour scale, with walls in grey and contours across the runs. The frame widens to fit them; the contour interval coarsens in whole multiples when the range gets large, and the platform high/low and stats stay platform-only. Untick it to get the full colour range back on the platform.
+
 The platform surface unrolled along the track (station across, distance back from the edge down), coloured by one of:
 
 - **Top of platform elevation** — sequential blue, light = low, dark = high, with contours at a set interval (every fifth labelled). Good for spotting drainage low points and the crest or sag of a vertical curve.
