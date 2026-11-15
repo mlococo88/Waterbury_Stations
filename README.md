@@ -247,6 +247,7 @@ The Library can copy every saved platform to the private GitHub repository the A
 - Saves upload in the background within a few seconds; offline saves wait and are retried. The Library shows each platform's GitHub status (synced, waiting to upload, this browser only, GitHub newer, conflict).
 - Nothing is overwritten or deleted on GitHub silently: a project changed on two devices keeps both (yours as a conflict copy), and deleting asks before removing the GitHub copy.
 - The token stays in this browser's storage, is sent only to api.github.com, and is never part of a platform file. With sync not set up, the app makes no request.
+- **Token expiry:** enter the token's expiry date in Cloud sync (GitHub)… (**Token expires on**). From 14 days before, a yellow banner at the top of the page says how many days are left; once it expires or GitHub refuses the token, a red banner says sync is paused (saves wait in this browser) and lists the steps to regenerate the token and paste it, with a button that opens the settings. This is the All-Structural change TOKX (PR #1589), copied in.
 
 
 - **Autosave** to browser storage.
