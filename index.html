@@ -3027,7 +3027,8 @@ function renderChains(){ renderChainUI(); drawChainPlan(); drawChainProfile(); d
    Sequential metrics use one blue ramp, light (low) to dark (high); the
    deviation metric is diverging around zero with a neutral grey midpoint.
    ============================================================ */
-const HM_SEQ=['#cde2fb','#b7d3f6','#9ec5f4','#86b6ef','#6da7ec','#5598e7','#3987e5','#2a78d6','#256abf','#1c5cab','#184f95','#104281','#0d366b'];
+// low to high: blue through a pale midpoint to red
+const HM_SEQ=['#0d366b','#1c5cab','#3987e5','#86b6ef','#cde2fb','#f4efe6','#fbd0c9','#f29b8d','#e05f4b','#b83a28','#83261a'];
 const HM_DIV_LO=['#0d366b','#1c5cab','#3987e5','#86b6ef','#cde2fb'];   // below target
 const HM_DIV_HI=['#fbd0c9','#f29b8d','#e05f4b','#b83a28','#83261a'];   // above target
 const HM_MID='#f0efec';
