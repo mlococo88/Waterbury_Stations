@@ -2354,7 +2354,9 @@ function openPop3(o){
       ['Top of pedestal',C.ped?f3(b.pedTop):''],['Bottom of pedestal',C.ped&&b.pedBot!=null?f3(b.pedBot):''],['Column base (bottom of base plate)',C.ped?f3(b.colBase):''],
       ['Top of pile cap',b.pcTop!=null?f3(b.pcTop):''],['Bottom of pile cap',b.pcBot!=null?f3(b.pcBot):''],
       ['Grade',f2(b.grade)+(b.gradeOwn?'':' (default)')],['Exposure above grade',b.exposure!=null?ftin(b.exposure):'']]);
-    if(b.rows&&b.rows.length) h+=`<h2 class="sec mt">Beam seats</h2>`+tbl(b.rows.map(r=>[esc(r.lab),ftin(r.off)+' from edge',f3(r.tob!=null?r.tob:r.topBeam),f3(r.bob!=null?r.bob:r.botBeam),r.plate!=null?(r.plate*12).toFixed(3)+'"':(r.mp!=null?(r.mp*12).toFixed(3)+'"':'—')]),['Beam','Offset','Top of beam','Bottom of beam','Masonry plate']);
+    if(b.rows&&b.rows.length) h+=`<h2 class="sec mt">Beam seats</h2>`+tbl(b.rows.map(r=>[esc(r.lab)+(r.anchor?' (anchor)':''),ftin(r.off)+' from edge',f3(r.zP),f3(r.topB),f3(r.botB),
+      r.sole!=null?(r.sole*12).toFixed(2)+'"':'—', r.elast!=null?(r.elast*12).toFixed(2)+'"':'—', r.masRnd!=null?(r.masRnd*12).toFixed(3)+'"':'—', f3(r.capTop)]),
+      ['Beam','Offset','Top of platform','Top of beam','Bottom of beam','Sole plate','Pad','Masonry plate','Seat (cap top)']);
     h+=svgBox('0 0 1100 640'); draw=()=>drawSection('svg_pop', b.sta, true, b);
     go=()=>{ closePop3(); document.querySelector('.tabbtn[data-tab="sup"]')?.click(); };
   } else if(o.t==='beam'){
@@ -2362,8 +2364,8 @@ function openPop3(o){
     const S=wf(bm);
     h+=kv([['Section',esc(bm.shape||S.name||'custom')],['Depth',(S.d).toFixed(2)+' in'],['Flange',(S.bf).toFixed(2)+' × '+(S.tf).toFixed(3)+' in'],['Web',(S.tw).toFixed(3)+' in'],['Offset from edge',ftin(+bm.off)]]);
     const rows=ENG.bents().map(b=>{ const r=(b.rows||[]).find(x=>x.lab===bm.lab); if(!r) return null;
-      const tob=ENG.surfElev(b.sta,+bm.off)-C.panel; return [b.name,formatStation(b.sta),f3(tob),f3(tob-S.d/12),r.mp!=null?(r.mp*12).toFixed(3)+'"':(r.plate!=null?(r.plate*12).toFixed(3)+'"':'—')]; }).filter(Boolean);
-    h+=`<h2 class="sec mt">At each support</h2>`+tbl(rows,['Support','Station','Top of beam','Bottom of beam','Masonry plate']);
+      return [b.name,formatStation(b.sta),f3(r.zP),f3(r.topB),f3(r.botB),r.masRnd!=null?(r.masRnd*12).toFixed(3)+'"':'—',f3(r.capTop)]; }).filter(Boolean);
+    h+=`<h2 class="sec mt">At each support</h2>`+tbl(rows,['Support','Station','Top of platform','Top of beam','Bottom of beam','Masonry plate','Seat (cap top)']);
   } else if(o.t==='plat'){
     title='Platform'; sub=formatStation(C.sta0)+' to '+formatStation(C.sta1);
     const zs=[]; for(let i=0;i<=40;i++){ const st=C.sta0+(C.sta1-C.sta0)*i/40; zs.push(ENG.edgeElev(st),ENG.surfElev(st,C.W)); }
