@@ -44,7 +44,9 @@
 .pop3-body { padding:10px 12px 14px; }
 .pop3-body table { width:100%; }
 .pop3-body svg { width:100%; height:auto; border:1px solid rgba(28,26,23,.15); margin-top:8px; }
-#pane-chains .cols { grid-template-columns: minmax(0, 600px) minmax(0, 1fr); }
+#pane-struct .cols { grid-template-columns: minmax(0, 500px) minmax(0, 1fr); }   /* room for the beam-line table */
+#pane-chains .cols { grid-template-columns: minmax(0, 0.95fr) minmax(0, 1fr); }
+#pane-chains .cols > div:last-child { position: sticky; top: 8px; }   /* the plan and profile stay in view beside the long editor */
   #ch_edit .subtbl input, #ch_edit .subtbl select { min-width: 58px; }
   #ch_edit .subtbl td, #ch_edit .subtbl th { padding: 2px 3px; }
   .cols > div { min-width: 0; }
@@ -59,6 +61,7 @@
     background: var(--paper); color: var(--ink); border-radius: 2px; font-size: 13px; }
   textarea { line-height: 1.5; resize: vertical; }
   input:focus,select:focus,textarea:focus { outline: 2px solid var(--cyan); outline-offset: -1px; }
+  .row2, .row3, .row4 { align-items: end; }   /* inputs line up even when one label wraps to two lines */
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
   .row4 { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; }
@@ -76,6 +79,7 @@
   .svgcard svg, .svgcard canvas { display: block; width: 100%; height: auto; }
   .gctrl { margin-left:auto; display:flex; gap:3px; align-items:center; flex-wrap:nowrap; }
   .gctrl button { padding:1px 7px; font-size:11px; line-height:1.4; background:transparent; color:var(--ink); border:1px solid var(--graphite); }
+  .sdx-btns button { color: var(--ink) !important; border-color: var(--graphite) !important; }   /* the shared sheet viewer's zoom buttons, readable on this palette */
   .gctrl button:hover { background:var(--cyan); color:var(--vellum); border-color:var(--cyan); }
   table { border-collapse: collapse; width: 100%; font-size: 12px; }
   table.wide { width: auto; min-width: 100%; }
@@ -93,6 +97,8 @@
   .subtbl input.ovr:focus { color: var(--ink); border-color: var(--cyan); font-style: normal; background: rgba(255,255,255,.5); }
   .subtbl input.ovr.edited { color: var(--oxide); border-style: solid; border-color: var(--oxide); font-style: normal; }
   .scroll { overflow-x: auto; }
+  fieldset { min-width: 0; }                      /* a fieldset otherwise grows to its widest table and spills into the next column */
+  .cols input, .cols select { min-width: 0; max-width: 100%; box-sizing: border-box; }
   .chk { display:flex; justify-content:space-between; gap:14px; padding:5px 9px; border:1px solid var(--vellum-edge); border-radius:2px; margin-bottom:5px; font-size:12px; background:rgba(255,255,255,.3); }
   .chk .st { font-weight:600; white-space:nowrap; }
   .calcsec { margin: 0 0 22px; }
@@ -774,7 +780,7 @@ Open: confirm 10 in casing with geotech."></textarea>
 
 <section class="tabpane" id="pane-sheets" role="tabpanel">
   <h2 class="sec">Sheets</h2>
-  <p class="note" style="margin-bottom:10px;">11 &times; 17 sheets of the ramps, stairs, walls and column foundations: a plan of each ramp and stair, the developed elevation of every wall, each column foundation, and the schedules. Every sheet is drawn at a standard scale inside its border and title block; the preview is drawn from the same entities as the DXF. The DXF is AutoCAD R12, model space, full size in inches, with the sheets side by side; plot each at the scale in its title block.</p>
+  <p class="note" style="margin-bottom:10px;">11 &times; 17 sheets: a site plan of the station, a plan of each ramp and stair, the developed elevation of every wall, the column foundations, a detail of every pier (two to a sheet), and the pier, wall and column schedules with notes. Every sheet is drawn at a standard scale inside its border and title block; the preview is drawn from the same entities as the DXF. The DXF is AutoCAD R12, model space, full size in inches, with the sheets side by side; plot each at the scale in its title block.</p>
   <fieldset><legend>title block</legend>
     <div class="row4">
       <div><label>Project</label><input type="text" id="sh_proj" placeholder="platform name"></div>
@@ -2030,9 +2036,10 @@ function drawProfileView(id, opts){
   const TX=s=>padL+(s-a0)/Math.max(a1-a0,1e-9)*(W-padL-padR);
   const TY=z=>H-padB-(z-lo)/Math.max(hi-lo,1e-9)*(H-padT-padB);
   let s='';
-  for(let i=0;i<=5;i++){ const z=lo+(hi-lo)*i/5;
+  const zStep=(()=>{ const r=(hi-lo)/5, m=Math.pow(10,Math.floor(Math.log10(r||1))); return [1,2,2.5,5,10].map(f=>f*m).find(v=>v>=r)||10*m; })();   // round elevations on the axis
+  for(let z=Math.ceil(lo/zStep-1e-9)*zStep; z<=hi+1e-9; z+=zStep){
     s+=`<line x1="${padL}" y1="${TY(z).toFixed(1)}" x2="${W-padR}" y2="${TY(z).toFixed(1)}" stroke="var(--graphite)" stroke-width="0.4" opacity="0.45"/>`;
-    s+=`<text x="${padL-6}" y="${(TY(z)+3).toFixed(1)}" font-size="8.5" font-family="monospace" fill="var(--ink-soft)" text-anchor="end">${z.toFixed(2)}</text>`; }
+    s+=`<text x="${padL-6}" y="${(TY(z)+3).toFixed(1)}" font-size="8.5" font-family="monospace" fill="var(--ink-soft)" text-anchor="end">${z.toFixed(zStep<1?1:0)}</text>`; }
   const ticks=6;
   for(let i=0;i<=ticks;i++){ const st=a0+(a1-a0)*i/ticks;
     s+=`<line x1="${TX(st).toFixed(1)}" y1="${padT}" x2="${TX(st).toFixed(1)}" y2="${H-padB}" stroke="var(--graphite)" stroke-width="0.3" opacity="0.35"/>`;
@@ -2206,7 +2213,7 @@ function drawSection(id, sta, showStruct, bent){
     capF=C.capF; capB=C.capF+C.capW; zCF=B.capFront; zCB=B.capBack;
     const capLbl=wall?'TOP OF PIER WALL ':'TOP OF CAP ';
     s+=`<path d="M${TX(eOff+capF)},${TY(zCF)} L${TX(eOff+capB)},${TY(zCB)} L${TX(eOff+capB)},${TY(B.botCap)} L${TX(eOff+capF)},${TY(B.botCap)} Z" fill="rgba(28,26,23,.10)" stroke="var(--ink)" stroke-width="1.2"/>`;
-    s+=txt(TX(eOff+(capF+capB)/2),TY((zCF+zCB)/2)-7,capLbl+F(zCF),'var(--ink)','middle',9,true);
+    s+=txt(TX(eOff+(capF+capB)/2),TY((zCF+zCB)/2)+(wall?40:-7),capLbl+F(zCF),'var(--ink)','middle',9,true);   // a wall is tall: label it inside, under the seat labels
     if(Math.abs(zCB-zCF)>1e-6) s+=txt(TX(eOff+capB),TY(zCB)-5,F(zCB),'var(--ink)',AOUT,8.5,true);
     s+=txt(TX(eOff+(capF+capB)/2),TY(B.botCap)-6,(wall?'bot of wall ':'bot of cap ')+F(B.botCap),'var(--ink-soft)','middle',8);
     if(ftOn){
@@ -2237,8 +2244,9 @@ function drawSection(id, sta, showStruct, bent){
         s+=`<rect x="${(x-wMas).toFixed(1)}" y="${TY(zPad)}" width="${(wMas*2).toFixed(1)}" height="${Math.max(1.5,TY(r.capTop)-TY(zPad)).toFixed(1)}" fill="var(--oxide)" opacity="0.8"/>`;
       }
       s+=txt(x,yT-4,F(r.topB),'var(--ink)','middle',7.5);
-      s+=txt(x,TY(B.botCap)+11, esc(r.lab)+(S.name?' \u00b7 '+S.name:'')+(r.anchor?' (anchor)':''),'var(--ink-soft)','middle',7.5);
-      s+=txt(x,TY(B.botCap)+21, 'masonry '+(r.mas*12).toFixed(2)+'"','var(--oxide)','middle',7.5);
+      const yl=wall?TY(r.capTop):TY(B.botCap);      // under the seat on a wall, under the cap on a cap beam
+      s+=txt(x,yl+11, esc(r.lab)+(S.name?' \u00b7 '+S.name:'')+(r.anchor?' (anchor)':''),'var(--ink-soft)','middle',7.5);
+      s+=txt(x,yl+21, 'masonry '+(r.mas*12).toFixed(2)+'"','var(--oxide)','middle',7.5);
     });
 
     if(C.pile && !wall && B.piles && B.piles.length){
@@ -2413,20 +2421,22 @@ function drawFramePlan(){
   // platform outline on top
   s+=line(edge,'var(--oxide)',2)+line(back,'var(--cyan)',1.3);
   // support labels
-  B.forEach((b,i)=>{ const p=RT(ENG.platPt(b.sta,C.W+2.5,b.skew));
+  B.forEach((b,i)=>{ const far=Math.max(C.W, b.ftB!=null?b.ftB:0, C.ped&&b.pedOff!=null?b.pedOff+Math.max(C.pedW,b.pcTop!=null?C.pcW:0)/2:0);   // clear of the footing and pedestal
+    const p=RT(ENG.platPt(b.sta,far+2.5,b.skew));
     s+=`<text x="${TX(p.x).toFixed(1)}" y="${TY(p.y).toFixed(1)}" font-size="8" font-family="monospace" fill="var(--ink-soft)" text-anchor="middle">${esc(b.name)}</text>`; });
   if(B.length){
+    const wFar=Math.max(C.W,...B.map(b=>Math.max(b.ftB!=null?b.ftB:0, C.ped&&b.pedOff!=null?b.pedOff+Math.max(C.pedW,b.pcTop!=null?C.pcW:0)/2:0)))+7;   // past the pier labels
     const mark=(sta,bent,txt)=>{
-      const q=RT(ENG.platPt((sta+bent.sta)/2, C.W+6, 0));
+      const q=RT(ENG.platPt((sta+bent.sta)/2, wFar, 0));
       s+=`<text x="${TX(q.x).toFixed(1)}" y="${TY(q.y).toFixed(1)}" font-size="8.5" font-family="monospace" fill="var(--oxide)" text-anchor="middle">${txt}</text>`;
-      [sta,bent.sta].forEach(t2=>{ const a=RT(ENG.platPt(t2,C.W,0)), z=RT(ENG.platPt(t2,C.W+5,0));
+      [sta,bent.sta].forEach(t2=>{ const a=RT(ENG.platPt(t2,C.W,0)), z=RT(ENG.platPt(t2,wFar-1,0));
         s+=`<line x1="${TX(a.x).toFixed(1)}" y1="${TY(a.y).toFixed(1)}" x2="${TX(z.x).toFixed(1)}" y2="${TY(z.y).toFixed(1)}" stroke="var(--oxide)" stroke-width="0.7"/>`; });
     };
     mark(s0,B[0],'cant '+(B[0].sta-s0).toFixed(2)+"'");
     mark(s1,B[B.length-1],'cant '+(s1-B[B.length-1].sta).toFixed(2)+"'");
   }
-  if(BEAMS.length && B.length>1){ const p=RT(ENG.platPt(B[0].sta-8,+BEAMS[0].off,0));
-    s+=`<text x="${TX(p.x).toFixed(1)}" y="${TY(p.y).toFixed(1)}" font-size="8" font-family="monospace" fill="var(--ink)" text-anchor="middle">${esc(BEAMS[0].lab)}</text>`; }
+  if(BEAMS.length && B.length>1) BEAMS.forEach(bm=>{ const p=RT(ENG.platPt(B[0].sta-8,+bm.off,0));
+    s+=`<text x="${TX(p.x).toFixed(1)}" y="${(TY(p.y)+3).toFixed(1)}" font-size="8" font-family="monospace" fill="var(--ink)" text-anchor="middle">${esc(bm.lab)}</text>`; });
   svg.innerHTML=svgWrap(id,s,W,H);
   const n=document.getElementById('frame_note');
   if(n) n.textContent=Math.abs(s1-s0).toFixed(1)+' ft long \u00b7 '+B.length+' supports \u00b7 cap '+ftin(C.capT)+' along track \u00b7 '+
@@ -2747,8 +2757,16 @@ function draw3D(){
     out+=`<path${di} d="M${f.q.map(q=>(ox+q.u*k).toFixed(1)+','+(oy-q.v*k).toFixed(1)).join(' L')} Z" fill="${hl?'rgb('+Math.min(255,c[0]*0.6+110)+','+Math.min(255,c[1]*0.5+60)+','+Math.round(c[2]*0.4)+')':'rgb('+c[0]+','+c[1]+','+c[2]+')'}"${op}`+
          (edges?' stroke="rgba(28,26,23,.35)" stroke-width="0.4"':' shape-rendering="crispEdges"')+'/>';
   }
-  labels3.forEach(L=>{ const q=pr(L.p); if(q.d<=0) return;
-    out+=`<text x="${(ox+q.u*k).toFixed(1)}" y="${(oy-q.v*k).toFixed(1)}" font-size="9" font-family="monospace" fill="var(--ink)" text-anchor="middle" paint-order="stroke" stroke="var(--paper)" stroke-width="2.6">${esc(L.t)}</text>`; });
+  // labels: nearest first; one that would sit on a label already placed is lifted a line
+  // at a time (with a thin leader back to its point), so crowded spots stay readable
+  const boxes=[];
+  labels3.map(L=>({L,q:pr(L.p)})).filter(o=>o.q.d>0).sort((a,b)=>a.q.d-b.q.d).forEach(({L,q})=>{
+    const x=ox+q.u*k, y0=oy-q.v*k, w=String(L.t).length*5.6+4, h=11;
+    let y=y0, n=0; const hit=yy=>boxes.some(b=>Math.abs(b.x-x)<(b.w+w)/2 && Math.abs(b.y-yy)<h);
+    while(hit(y) && n<6){ y-=h; n++; }
+    boxes.push({x,y,w});
+    if(n) out+=`<line x1="${x.toFixed(1)}" y1="${(y+2).toFixed(1)}" x2="${x.toFixed(1)}" y2="${(y0-6).toFixed(1)}" stroke="var(--ink-soft)" stroke-width="0.5"/>`;
+    out+=`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="9" font-family="monospace" fill="var(--ink)" text-anchor="middle" paint-order="stroke" stroke="var(--paper)" stroke-width="2.6">${esc(L.t)}</text>`; });
   svg.innerHTML=`<rect width="${W}" height="${H}" fill="var(--paper)"/>`+out;
   const note=document.getElementById('v3d_note');
   if(note) note.textContent=faces.length+' faces \u00b7 '+formatStation(s0,0)+' to '+formatStation(s1,0)+
@@ -3828,7 +3846,7 @@ function renderChainUI(){
       <div><label>Entry walls start under the platform <span class="unit">(ft)</span></label><input type="text" value="${c.wallsUnder==null?'':c.wallsUnder}" placeholder="0" onchange="chainSet(${i},'wallsUnder',this.value===''?'':parseFeetInches(this.value))" title="For a landing straight back from the platform: how far the side walls run in front of the back edge, under the platform."></div>
       <div></div></div>`}
     <div style="margin-top:8px;"><label>Columns on the walls &mdash; level pads</label>
-    <table class="subtbl"><tr><th class="lbl">Column</th><th>Station</th><th>Behind back edge (ft)</th><th>Pad length (ft)</th><th>Pad elev</th><th>or below platform (ft)</th><th>Top of pad</th><th>Column</th><th>BOBP</th><th></th></tr>
+    <div class="scroll"><table class="subtbl"><tr><th class="lbl">Column</th><th>Station</th><th>Behind back edge (ft)</th><th>Pad length (ft)</th><th>Pad elev</th><th>or below platform (ft)</th><th>Top of pad</th><th>Column</th><th>BOBP</th><th></th></tr>
     ${(c.pads||[]).map((pd,k)=>{ const po=(R.pads||[])[k]||{};
       const inp=(key,w)=>`<input type="text" style="width:${w}px" value="${esc(pd[key]==null?'':pd[key])}" onchange="padSet(${i},${k},'${key}',this.value)">`;
       return `<tr><td class="lbl">${inp('name',52)}</td><td><input type="text" style="width:90px" value="${pd.sta===''||pd.sta==null?'':formatStation(+pd.sta)}" onchange="padSet(${i},${k},'sta',parseStation(this.value))"></td>
@@ -3837,7 +3855,7 @@ function renderChainUI(){
         <td><input type="checkbox" ${pd.col!==false?'checked':''} onchange="padSet(${i},${k},'col',this.checked)"></td>
         <td><strong>${po.ok&&po.col?po.bobp.toFixed(3):'\u2014'}</strong></td>
         <td><button class="sm ghost" onclick="padDel(${i},${k})">&times;</button></td></tr>`; }).join('')}
-    </table>
+    </table></div>
     <button class="sm ghost" style="margin-top:4px;" onclick="padAdd(${i})">+ Column pad</button>
     <div class="row4" style="margin-top:6px;">
       <div><label>Grout pad <span class="unit">(in)</span></label><input type="text" value="${esc(c.colGrout==null?'':c.colGrout)}" placeholder="${(ENG.C.grout*12).toFixed(2)}" onchange="chainSet(${i},'colGrout',this.value)" title="Blank = the platform's grout pad (Structure tab)."></div>
@@ -4306,7 +4324,7 @@ function renderCF(){
   const inp=(i,k,w,ph)=>`<input type="text" style="width:${w}px" value="${esc(CFOOT[i][k]==null?'':CFOOT[i][k])}" placeholder="${ph==null?'':ph}" onchange="cfSet(${i},'${k}',this.value)">`;
   let h=`<table class="subtbl"><tr><th class="lbl">Column</th><th>Station</th><th>Behind back edge (ft)</th><th>Grade</th><th>Reveal (in)</th><th>Pedestal (in sq)</th><th>Footing L &times; W (ft)</th><th>Footing thick (ft)</th><th>Min. below grade (ft)</th><th>BOF set (ft)</th><th>Grout (in)</th><th>Base plate (in)</th><th>HSS (in)</th><th></th></tr>`;
   CFOOT.forEach((cf,i)=>{ const R=computeCF(cf);
-    h+=`<tr${i===CF_SEL?' style="background:rgba(27,110,120,.10)"':''}><td class="lbl">${inp(i,'name',56)}</td>
+    h+=`<tr${i===CF_SEL?' style="background:rgba(27,110,120,.10)"':''}><td class="lbl">${inp(i,'name',92)}</td>
       <td><input type="text" style="width:92px" value="${formatStation(+cf.sta)}" onchange="cfSet(${i},'sta',parseStation(this.value))"></td>
       <td>${inp(i,'off',60)}</td><td>${inp(i,'grade',64,R.grade!=null?R.grade.toFixed(2):'')}</td><td>${inp(i,'revealIn',40)}</td><td>${inp(i,'pedIn',40)}</td>
       <td>${inp(i,'ftgL',40)} &times; ${inp(i,'ftgW',40)}</td><td>${inp(i,'ftgT',40)}</td><td>${inp(i,'frost',40)}</td><td>${inp(i,'bofOvr',60,'')}</td>
@@ -4566,9 +4584,11 @@ function drawHeat(){
     // label major contours at the middle of the platform where they cross mid-width
     const placed=[];
     segs.filter(q=>q.major).forEach(q=>{
-      const m=q.d.match(/M([\d.]+),([\d.]+)/); if(!m) return;
-      if(placed.some(p2=>Math.abs(p2[0]-(+m[1]))<52 && Math.abs(p2[1]-(+m[2]))<14)) return;
-      placed.push([+m[1],+m[2]]);
+      // at the middle of the contour, kept inside the frame (clear of the support and beam labels)
+      const pts=[...q.d.matchAll(/([\d.]+),([\d.]+)/g)].map(x=>[+x[1],+x[2]]); if(!pts.length) return;
+      const mid=pts[Math.floor(pts.length/2)], m=[null, Math.max(padL+22,Math.min(padL+pw-22,mid[0])), Math.max(padT+12,Math.min(padT+ph-5,mid[1]))];
+      if(placed.some(p2=>Math.abs(p2[0]-m[1])<52 && Math.abs(p2[1]-m[2])<14)) return;
+      placed.push([m[1],m[2]]);
       s+=`<text x="${(+m[1]).toFixed(1)}" y="${(+m[2]-3).toFixed(1)}" font-size="8.5" font-family="monospace" fill="var(--ink)" text-anchor="middle" paint-order="stroke" stroke="var(--paper)" stroke-width="2.4">${q.lev.toFixed(2)}</text>`;
     });
   }
@@ -4799,6 +4819,7 @@ function buildSupportTables(){
     }));
     pbox.innerHTML=h4;
   } else { pbox.innerHTML='<tr><td class="lbl">'+(C.pierType==='wall'?'These piers are on spread footings, so there are no micropiles.':'Micropile reporting is off.')+'</td></tr>'; PILE_HEAD=[]; PILE_ROWS=[]; }
+  { const pc=document.getElementById('pile_csv'); if(pc) pc.style.display=PILE_ROWS.length?'':'none'; }
 
   // --- spans ---
   let h3='<tr><th class="lbl">Span</th><th class="lbl">Beam</th><th>Length</th><th>Top of beam start</th><th>Top of beam end</th><th>Slope %</th><th>Mid deviation (in)</th></tr>';
@@ -4830,7 +4851,7 @@ function buildSupportTables(){
         if(Math.abs(act-chord)>Math.abs(dev)) dev=act-chord; }
       h3+=`<tr><td class="lbl">${esc(a.name)}\u2013${esc(z.name)}</td><td class="lbl">${esc(bm.lab)}</td>`+
           `<td>${F(L,3)}</td><td>${F(za,d)}</td><td>${F(zz,d)}</td>`+
-          `<td>${F((zz-za)/Math.max(L,1e-9)*100,3)}</td><td>${(dev*12).toFixed(3)}</td></tr>`;
+          `<td>${F((zz-za)/Math.max(L,1e-9)*100,3)}</td><td>${(Math.abs(dev*12)<0.0005?0:dev*12).toFixed(3)}</td></tr>`;
     });
   }
   if(B.length) cant(pB,B[B.length-1],'Cantilever \u2013 end');
