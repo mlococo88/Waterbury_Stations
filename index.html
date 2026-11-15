@@ -2159,6 +2159,15 @@ function draw3D(){
           slab(a2,b2,Wd.fw,a.ftgTop,b.ftgTop,a.ftgBot,b.ftgBot,COL3.rftg); }
       }
     });
+    if(gb('v3d_col')) (R.pads||[]).filter(pd=>pd.ok&&pd.col).forEach(pd=>{
+      let ux=pd.pb.x-pd.pa.x, uy=pd.pb.y-pd.pa.y; const m=Math.hypot(ux,uy)||1; ux/=m; uy/=m;
+      const sq=(half,zb,zt,col)=>slab({x:pd.x-ux*half,y:pd.y-uy*half},{x:pd.x+ux*half,y:pd.y+uy*half},2*half,zt,zt,zb,zb,col);
+      const bp=pd.csz/2+4/12;                                    // plate 8" larger than the column
+      sq(bp,pd.top,pd.bobp,COL3.cap);                            // grout
+      sq(bp,pd.bobp,pd.tobp,COL3.beam);                          // base plate
+      sq(pd.csz/2,pd.tobp,pd.coltop,COL3.col);                   // HSS column
+      if(gb('v3d_lab')) labels3.push({p:{x:pd.x,y:pd.y,z:pd.coltop+0.8}, t:pd.name});
+    });
     if(gb('v3d_lab') && R.pts.length) labels3.push({p:{x:R.pts[0].x,y:R.pts[0].y,z:R.z0+2.5}, t:ch.name||''});
   });
 
@@ -2533,7 +2542,12 @@ function applyPads(ch, walls, WALL, checks){
     Q.filter(q=>q.t>tb+1e-6).forEach(q=>pts.push(q));
     pts.forEach(q=>{ q.height=q.ftgTop==null?null:q.top-q.ftgTop; q.exposed=q.grade==null?null:q.top-q.grade; });
     wl.pts=pts;
-    out.push({name, sta, off, ok:true, wall:wl.name, top, len:tb-ta, x:P.x, y:P.y, pa:{x:A.x,y:A.y}, pb:{x:B.x,y:B.y}});
+    // the column on the pad: grout pad, base plate, then the column
+    const num=(v,d)=>{ const t=String(v==null?'':v).trim(); return t===''||!isFinite(parseFloat(t)) ? d : parseFloat(t); };
+    const grout=num(ch.colGrout, C.grout*12)/12, bplate=num(ch.colBP, C.bplate*12)/12, csz=num(ch.colSize,8)/12, cht=num(ch.colHt, C.colHt>0?C.colHt:12);
+    const hasCol=pd.col!==false;
+    out.push({name, sta, off, ok:true, wall:wl.name, top, len:tb-ta, x:P.x, y:P.y, pa:{x:A.x,y:A.y}, pb:{x:B.x,y:B.y}, tc:hit.tp,
+      col:hasCol, grout, bplate, csz, cht, bobp:top+grout, tobp:top+grout+bplate, coltop:top+grout+bplate+cht});
   });
   walls.forEach(wl=>wl.pts.forEach((q,j)=>{ q.where = q.pad ? q.pad+(j>0&&wl.pts[j-1].pad===q.pad?' pad end':' pad start') : j===0?'start':j===wl.pts.length-1?'end':('break '+j); }));
   return out;
@@ -2601,7 +2615,7 @@ function allChains(){ return ENG ? CHAINS.map(ch=>{ try{ return computeChain(ch)
 /* ---------- inputs ---------- */
 function chainSet(i,k,v){ CHAINS[i][k]=v; refreshAll(); }
 function padAdd(i){ const c=CHAINS[i]; c.pads=c.pads||[]; const R=computeChain(c);
-  c.pads.push({name:'Col '+(c.pads.length+1), sta:+R.sta.toFixed(2), off:'', len:2, elev:'', below:''}); refreshAll(); }
+  c.pads.push({name:'Col '+(c.pads.length+1), sta:+R.sta.toFixed(2), off:'', len:2, elev:'', below:'', col:true}); refreshAll(); }
 function padSet(i,k,key,v){ CHAINS[i].pads[k][key]= (key==='sta'&&isFinite(v))? +(+v).toFixed(3) : v; refreshAll(); }
 function padDel(i,k){ CHAINS[i].pads.splice(k,1); refreshAll(); }
 function segSet(i,j,k,v){ CHAINS[i].segs[j][k]=v; refreshAll(); }
@@ -2666,15 +2680,23 @@ function renderChainUI(){
       <div><label>Entry walls start under the platform <span class="unit">(ft)</span></label><input type="text" value="${c.wallsUnder==null?'':c.wallsUnder}" placeholder="0" onchange="chainSet(${i},'wallsUnder',this.value===''?'':parseFeetInches(this.value))" title="For a landing straight back from the platform: how far the side walls run in front of the back edge, under the platform."></div>
       <div></div></div>`}
     <div style="margin-top:8px;"><label>Columns on the walls &mdash; level pads</label>
-    <table class="subtbl"><tr><th class="lbl">Column</th><th>Station</th><th>Behind back edge (ft)</th><th>Pad length (ft)</th><th>Pad elev</th><th>or below platform (ft)</th><th>Top</th><th></th></tr>
+    <table class="subtbl"><tr><th class="lbl">Column</th><th>Station</th><th>Behind back edge (ft)</th><th>Pad length (ft)</th><th>Pad elev</th><th>or below platform (ft)</th><th>Top of pad</th><th>Column</th><th>BOBP</th><th></th></tr>
     ${(c.pads||[]).map((pd,k)=>{ const po=(R.pads||[])[k]||{};
       const inp=(key,w)=>`<input type="text" style="width:${w}px" value="${esc(pd[key]==null?'':pd[key])}" onchange="padSet(${i},${k},'${key}',this.value)">`;
       return `<tr><td class="lbl">${inp('name',52)}</td><td><input type="text" style="width:90px" value="${pd.sta===''||pd.sta==null?'':formatStation(+pd.sta)}" onchange="padSet(${i},${k},'sta',parseStation(this.value))"></td>
         <td>${inp('off',58)}</td><td>${inp('len',50)}</td><td>${inp('elev',62)}</td><td>${inp('below',50)}</td>
         <td><strong>${po.ok?po.top.toFixed(3):'<span style="color:var(--bad)">no wall</span>'}</strong>${po.ok?' <span class="note">'+po.wall+'</span>':''}</td>
+        <td><input type="checkbox" ${pd.col!==false?'checked':''} onchange="padSet(${i},${k},'col',this.checked)"></td>
+        <td><strong>${po.ok&&po.col?po.bobp.toFixed(3):'\u2014'}</strong></td>
         <td><button class="sm ghost" onclick="padDel(${i},${k})">&times;</button></td></tr>`; }).join('')}
     </table>
     <button class="sm ghost" style="margin-top:4px;" onclick="padAdd(${i})">+ Column pad</button>
+    <div class="row4" style="margin-top:6px;">
+      <div><label>Grout pad <span class="unit">(in)</span></label><input type="text" value="${esc(c.colGrout==null?'':c.colGrout)}" placeholder="${(ENG.C.grout*12).toFixed(2)}" onchange="chainSet(${i},'colGrout',this.value)" title="Blank = the platform's grout pad (Structure tab)."></div>
+      <div><label>Base plate <span class="unit">(in)</span></label><input type="text" value="${esc(c.colBP==null?'':c.colBP)}" placeholder="${(ENG.C.bplate*12).toFixed(2)}" onchange="chainSet(${i},'colBP',this.value)" title="Blank = the platform's base plate (Structure tab)."></div>
+      <div><label>Column HSS <span class="unit">(in square)</span></label><input type="text" value="${esc(c.colSize==null?'':c.colSize)}" placeholder="8" onchange="chainSet(${i},'colSize',this.value)"></div>
+      <div><label>Column height <span class="unit">(ft, 3D)</span></label><input type="text" value="${esc(c.colHt==null?'':c.colHt)}" placeholder="${ENG.C.colHt>0?ENG.C.colHt:12}" onchange="chainSet(${i},'colHt',this.value)"></div>
+    </div>
     <p class="note" style="margin:4px 0 0;">Pad elev and below-platform blank: the pad is level at the higher end. A pad within 6" of a wall end runs to the end.</p></div>
     ${c.ftgMode==='level'?`<label>Bottom of footing, level <span class="unit">(ft)</span></label>
     <input class="ovr" type="number" step="0.01" value="${esc(c.ftgBot==null?'':c.ftgBot)}" placeholder="${R.WALL.bofFix!=null?R.WALL.bofFix.toFixed(2):''}" onchange="chainSet(${i},'ftgBot',this.value)" title="Blank = frost depth below the lowest grade along the walls.">`:''}
@@ -2825,7 +2847,7 @@ function drawChainPlan(){
         s+=`<text x="${TX(m.x).toFixed(1)}" y="${(TY(m.y)+3).toFixed(1)}" font-size="9" font-family="monospace" fill="var(--paper)" text-anchor="middle" font-weight="bold" paint-order="stroke" stroke="var(--ink)" stroke-width="2.6">${wl.name}</text>`; }
     });
     // columns that land on the walls, with their level pads
-    if(sel && Q.pads) Q.pads.filter(pd=>pd.ok).forEach((pd,pk)=>{ const c=RT({x:pd.x,y:pd.y}), hs=0.5, lf=pk%2===0;
+    if(sel && Q.pads) Q.pads.filter(pd=>pd.ok).forEach((pd,pk)=>{ const c=RT({x:pd.x,y:pd.y}), hs=pd.col?pd.csz/2:0, lf=pk%2===0;
       // the level pad: its true length along the wall, the wall's thickness across
       { let ux=pd.pb.x-pd.pa.x, uy=pd.pb.y-pd.pa.y; const m=Math.hypot(ux,uy)||1; ux/=m; uy/=m;
         const h2=Q.WALL.t/2+0.08, nx=-uy*h2, ny=ux*h2;
@@ -2833,7 +2855,7 @@ function drawChainPlan(){
         s+=`<path d="M${poly(box)} Z" fill="rgba(184,58,40,.28)" stroke="var(--oxide)" stroke-width="1.2"/>`; }
       // the column on it
       s+=`<rect x="${(TX(c.x)-hs*k).toFixed(1)}" y="${(TY(c.y)-hs*k).toFixed(1)}" width="${(2*hs*k).toFixed(1)}" height="${(2*hs*k).toFixed(1)}" fill="var(--paper)" stroke="var(--ink)" stroke-width="1"/>`+
-         `<text x="${(lf?TX(c.x)-hs*k-3:TX(c.x)+hs*k+3).toFixed(1)}" y="${(TY(c.y)-hs*k-3).toFixed(1)}" text-anchor="${lf?'end':'start'}" font-size="8.5" font-family="monospace" fill="var(--oxide)" paint-order="stroke" stroke="var(--paper)" stroke-width="2.4">${esc(pd.name)} pad ${pd.top.toFixed(2)} \u00b7 ${ftin(pd.len)}</text>`; });
+         `<text x="${(lf?TX(c.x)-hs*k-3:TX(c.x)+hs*k+3).toFixed(1)}" y="${(TY(c.y)-hs*k-3).toFixed(1)}" text-anchor="${lf?'end':'start'}" font-size="8.5" font-family="monospace" fill="var(--oxide)" paint-order="stroke" stroke="var(--paper)" stroke-width="2.4">${esc(pd.name)} pad ${pd.top.toFixed(2)} \u00b7 ${ftin(pd.len)}${pd.col?' \u00b7 BOBP '+pd.bobp.toFixed(2):''}</text>`; });
     // walking line with direction arrows
     const P=Q.path.map(p=>RT(p));
     if(sel){
@@ -2954,6 +2976,21 @@ function drawWallElev(){
     s+=txt((xa+xb)/2, TY(c.top)+(c.ftgTop!=null?(TY(c.ftgTop)-TY(c.top))/2:12), c.name, {fs:8.5,c:'var(--cyan)',b:true});
   });
 
+  // columns on this wall: grout pad, base plate and a broken column stub, with BOBP
+  (R.pads||[]).filter(pd=>pd.ok&&pd.col&&pd.wall===wl.name).forEach(pd=>{
+    const tc=pd.tc, bp=pd.csz/2+4/12, stub=Math.max(1.5,pd.csz*3);
+    const xa=TX(tc-bp), xb=TX(tc+bp), ca=TX(tc-pd.csz/2), cb=TX(tc+pd.csz/2);
+    s+=`<rect x="${F(xa)}" y="${F(TY(pd.bobp))}" width="${F(xb-xa)}" height="${F(TY(pd.top)-TY(pd.bobp))}" fill="rgba(140,136,126,.6)" stroke="var(--ink)" stroke-width="0.6"/>`;
+    s+=`<rect x="${F(xa)}" y="${F(TY(pd.tobp))}" width="${F(xb-xa)}" height="${F(TY(pd.bobp)-TY(pd.tobp))}" fill="var(--ink)" stroke="var(--ink)" stroke-width="0.6"/>`;
+    const yt=TY(pd.tobp+stub);
+    s+=`<path d="M${F(ca)},${F(TY(pd.tobp))} L${F(ca)},${F(yt+4)} L${F((ca+cb)/2-3)},${F(yt+8)} L${F((ca+cb)/2+3)},${F(yt)} L${F(cb)},${F(yt+4)} L${F(cb)},${F(TY(pd.tobp))} Z" fill="rgba(92,98,106,.35)" stroke="var(--ink)" stroke-width="1"/>`;
+    s+=txt(cb+6,TY(pd.tobp+stub*0.55),'HSS '+(pd.csz*12).toFixed(0)+'\u00d7'+(pd.csz*12).toFixed(0),{fs:8,a:'start',c:'var(--ink-soft)'});
+    // BOBP called out on the wall face just below the pad, clear of the top-of-wall labels
+    s+=`<line x1="${F((xa+xb)/2)}" y1="${F(TY(pd.bobp))}" x2="${F((xa+xb)/2)}" y2="${F(TY(pd.top)+10)}" stroke="var(--oxide)" stroke-width="0.6"/>`;
+    s+=txt((xa+xb)/2,TY(pd.top)+20,'BOBP '+pd.bobp.toFixed(2),{fs:8.5,b:true,c:'var(--oxide)'});
+    s+=txt((xa+xb)/2,TY(pd.top)+31,(pd.grout*12).toFixed(0)+'" grout \u00b7 '+(pd.bplate*12).toFixed(2).replace(/\.?0+$/,'')+'" plate',{fs:7.5,c:'var(--ink-soft)'});
+  });
+
   // elevation callouts above the wall at every end, break and pad, in rows so none overlap
   const rowsEnd=[]; const ROWH=13;
   const callTop=[];
@@ -3054,6 +3091,13 @@ function renderWallTable(){
        `<td>${ftin(wl.len)}</td><td>${f(mx(T))}</td><td>${f(mn(T))}</td><td>${f(mx(B))}</td><td>${f(mn(B))}</td>`+
        `<td>${Hh.length?ftin(mx(Hh)):'—'}</td><td>${E.length?ftin(mx(E)):'—'}</td></tr>`; });
   h+='</table>';
+  const cols=(R.pads||[]).filter(pd=>pd.ok&&pd.col);
+  if(cols.length){
+    h+=`<h2 class="sec mt">Columns on the walls</h2><table class="wide"><tr><th class="lbl">Column</th><th>Station</th><th>Behind back edge</th><th>Northing</th><th>Easting</th><th class="lbl">On wall</th><th>Top of pad (concrete)</th><th>Grout</th><th>Bottom of base plate</th><th>Base plate</th><th>Top of base plate</th><th>Pad length</th></tr>`;
+    cols.forEach(c=>{ h+=`<tr><td class="lbl"><strong>${esc(c.name)}</strong></td><td>${formatStation(c.sta)}</td><td>${ftin(c.off)}</td><td>${c.y.toFixed(3)}</td><td>${c.x.toFixed(3)}</td><td class="lbl">${c.wall}</td>`+
+      `<td>${c.top.toFixed(3)}</td><td>${(c.grout*12).toFixed(2)}"</td><td><strong>${c.bobp.toFixed(3)}</strong></td><td>${(c.bplate*12).toFixed(2)}"</td><td>${c.tobp.toFixed(3)}</td><td>${ftin(c.len)}</td></tr>`; });
+    h+=`</table><p class="note">HSS ${(cols[0].csz*12).toFixed(0)}\u00d7${(cols[0].csz*12).toFixed(0)} columns. Bottom of base plate = top of pad + grout.</p>`;
+  }
   const wl=R.walls[Math.min(WALL_SEL,R.walls.length-1)];
   h+=`<h2 class="sec mt">${wl.name} — elevations at each end and break</h2><table class="wide"><tr><th class="lbl">Point</th><th>Along wall</th><th>Northing</th><th>Easting</th><th>Top of wall</th><th>Ramp surface</th><th>Grade</th><th>Top of footing</th><th>Bottom of footing</th><th>Wall height</th><th>Exposed</th></tr>`;
   wl.pts.forEach(q=>{ h+=`<tr><td class="lbl">${esc(q.where)}</td><td>${(q.t-wl.pts[0].t).toFixed(2)}</td><td>${q.y.toFixed(3)}</td><td>${q.x.toFixed(3)}</td>`+
