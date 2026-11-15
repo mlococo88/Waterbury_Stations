@@ -152,6 +152,7 @@
     <button class="tabbtn" role="tab" aria-selected="false" data-tab="chains">Ramps &amp; Stairs</button>
     <button class="tabbtn" role="tab" aria-selected="false" data-tab="heat">Heat Map</button>
     <button class="tabbtn" role="tab" aria-selected="false" data-tab="v3d">3D</button>
+    <button class="tabbtn" role="tab" aria-selected="false" data-tab="sheets">Sheets</button>
     <button class="tabbtn" role="tab" aria-selected="false" data-tab="calc">Calculations</button>
     <button class="tabbtn" role="tab" aria-selected="false" data-tab="notes">Notes</button>
   </div>
@@ -767,8 +768,423 @@ Open: confirm 10 in casing with geotech."></textarea>
   </div>
 </section>
 
+<section class="tabpane" id="pane-sheets" role="tabpanel">
+  <h2 class="sec">Sheets</h2>
+  <p class="note" style="margin-bottom:10px;">11 &times; 17 sheets of the ramps, stairs, walls and column foundations: a plan of each ramp and stair, the developed elevation of every wall, each column foundation, and the schedules. Every sheet is drawn at a standard scale inside its border and title block; the preview is drawn from the same entities as the DXF. The DXF is AutoCAD R12, model space, full size in inches, with the sheets side by side; plot each at the scale in its title block.</p>
+  <fieldset><legend>title block</legend>
+    <div class="row4">
+      <div><label>Project</label><input type="text" id="sh_proj" placeholder="platform name"></div>
+      <div><label>Project no.</label><input type="text" id="sh_no"></div>
+      <div><label>Designed by</label><input type="text" id="sh_by"></div>
+      <div><label>Date</label><input type="text" id="sh_date"></div>
+    </div>
+    <div class="row4">
+      <div><label>Checked by</label><input type="text" id="sh_chk"></div>
+      <div><label>Checked date</label><input type="text" id="sh_cdate"></div>
+      <div></div><div></div>
+    </div>
+  </fieldset>
+  <div id="sh_area" style="margin-top:12px;"></div>
+</section>
+
 </main>
 <div class="hovbox" id="hovbox"></div>
+<script>
+/* SharedDxf: the DXF R12 writer, SVG preview, sheet border and sheet printing of the All-Structural repo
+   (mlococo88/All-Structural, shared/dxf.js), copied in whole so this file stays a single offline page. */
+/* shared/dxf.js — one DXF R12 (AC1009) writer for the repo (window.SharedDxf). Classic script, no build step, works from file://.
+   Plan: docs/REBUILD_PLAN.md §3 ("dxf.js: one DXF R12 writer"). Log: fixlog/shared-dxf.md.
+
+   Sources (2026-10-30):
+     - the file format and its tables: BasePlateAnchorDesigner.html bpDxfWriter (DX-1, #436; itself adapted from
+       Gusset Plate Rating.html GPDXF.write): ASCII R12, CRLF line ends, group codes right-aligned in 3 columns, LTYPE / LAYER /
+       STYLE tables, LINE, POLYLINE (VERTEX ... SEQEND), CIRCLE, TEXT, non-ASCII text as \U+XXXX;
+     - text justification and rotation, scaled linetypes, linear DIMENSION entities with their anonymous geometry blocks and a
+       dimension style per scale, chained dimensions and the entity list placed by groups: GirderDetail's writer class DxfW
+       ("Steel Bridge Design.html", anchor `class DxfW {`), with its text clean-up dxfStr and feet-inch format dxfFI.
+   Base Plate and Gusset keep their own copies for now (future users, fixlog/shared-dxf.md).
+
+   A drawing is a display list: drawing() records entities; toDXF() writes them as a DXF file; toSVG() draws the same list as an
+   SVG string (a preview that is the file). No DOM access except download().
+
+   Units: whatever the caller draws in (the Steel Bridge app draws full size in inches). Angles in degrees, counterclockwise from +x.
+
+   API
+     SharedDxf.drawing({ prefix }) -> D
+       D.h, D.k                text height and drawing scale factor used by the next text / dimension / linetype (set them per view)
+       D.layer(name, color, lt) -> the layer name (prefix + name, upper case); color = AutoCAD color index (1 red, 2 yellow, 3 green,
+                               4 cyan, 5 blue, 6 magenta, 7 white/black, 8, 9 grays, 30 orange)
+       D.ltype(base)           -> a linetype name for base 'CENTER' | 'HIDDEN' | 'DASHED' | 'PHANTOM' scaled to D.k ('CENTER_96')
+       D.line(l, x1, y1, x2, y2, lt), D.pline(l, pts, closed, lt), D.rect(l, x1, y1, x2, y2, lt), D.circle(l, x, y, r),
+       D.arc(l, x, y, r, a0, a1)  (counterclockwise from a0 to a1, degrees)
+       D.solid(l, pts)         a filled triangle or quadrilateral (3 or 4 corners in polygon order), in the layer's colour: DXF SOLID (added 2026-10-31,
+                               Steel Bridge stiffener tab: ratio colours as solid fills instead of hatching); the SVG preview draws every solid
+                               behind the other entities, translucent (opt.fill, default 0.4 opacity), so lines and text on top stay readable
+       D.text(l, x, y, hh, s, j, rot)  j: 0 left, 1 center, 2 right (at the baseline); rot degrees
+       D.dim(l, p1, p2, b, ang, txt)   linear dimension between p1 and p2, dimension line through b, direction ang (deg);
+                               txt may contain <> for the measured value (formatted by D.fmt, default feet-inches)
+       D.dimH(l, x1, x2, y, yref, txt), D.dimV(l, y1, y2, x, xref, txt), D.chainH(l, xs, y, yref), D.chainV(l, ys, x, xref)
+       D.mark(), D.bbox(i0, i1), D.move(i0, dx, dy)
+       D.toDXF(opt) -> the DXF text (opt.ltscale: $LTSCALE, default 1)
+     SharedDxf.toSVG(D, opt) -> '<svg ...>' of entities opt.i0..opt.i1 (default all); opt: { width, pad, bg, cls, title, frame }
+                             (frame [x0, y0, x1, y1]: the viewBox is exactly that rectangle instead of the entities' extents plus pad)
+     SharedDxf.viewer(host, svg, opt) (browser) the SVG in host with pan and zoom by its viewBox: wheel about the cursor, drag, pinch,
+                             double-click / double-tap to fit, on-canvas + / - / Fit; returns { level, set, zoom, fit }
+     SharedDxf.viewer(host, svg, opt) (browser) the SVG in host with pan and zoom by its viewBox: wheel about the cursor, drag, pinch,
+                             double-click / double-tap to fit, on-canvas + / - / Fit; returns { level, set, zoom, fit }
+     SharedDxf.sheetSVG(D, s, opt)  one sheet as an SVG whose viewBox is exactly its sheet border: s = { i0, i1, ox, W, H, title } (a sheet
+                             drawn at x offset ox, its outer border from (ox, 0) to (ox + W, H)); for printing at the plot scale (2026-11-03)
+     SharedDxf.printSheets(items, opt) (browser) prints sheets through the browser's print dialog, one vector page per sheet, each SVG
+                             filling the page (default 17 x 11 in, landscape, no margins: a B-size sheet drawn at its plot scale prints at
+                             that scale); items = [svg string | { svg, title }]; opt: { paper: [w, h] in inches }. A temporary print box and
+                             a named @page exist only while it prints (after it, Ctrl+P and the browser's Print print the Report as before).
+                             Returns { pages, warn }
+     SharedDxf.SHEET_INSET   0.25: the sheet's outer border (trim line) is drawn this many paper inches inside the paper edge (2026-11-03,
+                             engineer: printers do not clip it); SharedDxf.sheetBorder(D, l, ox, W, H, k) draws it: rect from
+                             (ox + 0.25 k, 0.25 k) to (ox + W - 0.25 k, H - 0.25 k) for a W x H sheet (model units) at plot scale k
+     SharedDxf.PRINT_NOTE    the note for the tools' UI next to the Print buttons (paper, orientation, margins and scale to choose)
+     SharedDxf.str(s)        text as DXF R12 accepts it (degree %%d, diameter %%c, x for ×, CL for ℄, HTML tags removed)
+     SharedDxf.frac(v, den), fmtIn(inch), fmtFtIn(inch)   9/16 (nearest 1/16 by default), 1 1/8", 12'-4 1/2" (nearest 1/8 in)
+     SharedDxf.parse(text)   -> { pairs, sections, tables, blocks, entities } (tests; any DXF this writer makes)
+     SharedDxf.validate(text) -> { ok, errors, counts, layers }: structure checks (SECTION/ENDSEC pairs, HEADER $ACADVER, ENTITIES,
+                               EOF, numeric group codes, POLYLINE ... SEQEND, every layer, linetype, dimension style and block used
+                               is defined)
+     SharedDxf.download(text, filename)  saves the file (Blob + a[download]; works from file:// in Chrome, Edge, Firefox) */
+(function () {
+  'use strict';
+  const BASE_LT = { CONTINUOUS: [], DASHED: [0.5, -0.25], HIDDEN: [0.25, -0.125], CENTER: [1.25, -0.25, 0.25, -0.25], PHANTOM: [1.25, -0.25, 0.25, -0.25, 0.25, -0.25] };
+  const LT_DESC = { CONTINUOUS: 'Solid line', DASHED: '__ __ __ __', HIDDEN: '_ _ _ _ _', CENTER: '____ _ ____ _', PHANTOM: '_____ _ _ _____' };
+
+  /* numbers: up to 6 decimals, trailing zeros removed, never "-0" (bpDxfWriter f8) */
+  function num(x) { let s = (Math.abs(x) < 5e-9 ? 0 : +x).toFixed(6); if (s.indexOf('.') >= 0) s = s.replace(/0+$/, '').replace(/\.$/, ''); return s === '-0' ? '0' : s; }
+  /* text clean-up (GirderDetail dxfStr, then bpDxfWriter enc for anything else that is not ASCII) */
+  function str(s) {
+    return String(s == null ? '' : s).replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/[°º]/g, '%%d').replace(/[⌀Ø]/g, '%%c').replace(/×/g, 'x')
+      .replace(/[−–—]/g, '-').replace(/℄/g, 'CL').replace(/[′’]/g, "'").replace(/[″”“]/g, '"').replace(/±/g, '%%p').replace(/[\r\n\t]+/g, ' ')
+      .replace(/[^\x20-\x7e]/g, c => '\\U+' + c.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')).slice(0, 250);
+  }
+  /* fractions of an inch: v to the nearest 1/den (default 1/16, as GirderDetail's frac for plate sizes), "1 1/8", "9/16" (den a power of 2) */
+  function frac(v, den) {
+    den = den || 16; const sg = v < 0 ? '-' : ''; let n = Math.round(Math.abs(v) * den), w = Math.floor(n / den), r = n - w * den, d = den;
+    while (r && r % 2 === 0) { r /= 2; d /= 2; }
+    return sg + (r ? (w ? `${w} ${r}/${d}` : `${r}/${d}`) : String(w));
+  }
+  /* inches to the nearest 1/8 (GirderDetail dxfIn), 7/8" */
+  const fmtIn = inch => `${frac(inch, 8)}"`;
+  /* feet-inches (GirderDetail dxfFI): under 12 in as inches, else 12'-4 1/2" */
+  function fmtFtIn(inch) {
+    const s = inch < 0 ? '-' : ''; const a = Math.round(Math.abs(inch) * 8) / 8; if (a < 12 - 1e-9) return `${s}${frac(a, 8)}"`;
+    let ft = Math.floor(a / 12 + 1e-9), r = a - ft * 12; if (r >= 12 - 1e-9) { ft++; r = 0; } return `${s}${ft}'-${frac(r, 8)}"`;
+  }
+
+  /* the geometry of a linear dimension (GirderDetail DxfW._dimGeo): extension lines, dimension line, 45° ticks and the text, in world
+     coordinates. e = { pts: [p1, p2, d1, d2], ang, k, hh, s (text) } */
+  function dimGeo(e) {
+    const [p1, p2, d1, d2] = e.pts, k = e.k, a = e.ang * Math.PI / 180, u = [Math.cos(a), Math.sin(a)], nv = [-u[1], u[0]], g = [];
+    const ext = (p, d) => { const v = [d[0] - p[0], d[1] - p[1]], L = Math.hypot(v[0], v[1]); if (L < 1e-9) return; const w = [v[0] / L, v[1] / L];
+      g.push({ t: 'LINE', pts: [[p[0] + w[0] * 0.06 * k, p[1] + w[1] * 0.06 * k], [d[0] + w[0] * 0.12 * k, d[1] + w[1] * 0.12 * k]] }); };
+    ext(p1, d1); ext(p2, d2); g.push({ t: 'LINE', pts: [d1.slice(), d2.slice()] });
+    const tk = 0.07 * k; [d1, d2].forEach(d => g.push({ t: 'LINE', pts: [[d[0] - (u[0] + nv[0]) * tk, d[1] - (u[1] + nv[1]) * tk], [d[0] + (u[0] + nv[0]) * tk, d[1] + (u[1] + nv[1]) * tk]] }));
+    let rot = e.ang; if (rot > 90.001 && rot <= 270) rot -= 180;
+    const m = [(d1[0] + d2[0]) / 2 + nv[0] * 0.05 * k, (d1[1] + d2[1]) / 2 + nv[1] * 0.05 * k], ra = rot * Math.PI / 180, off = [-Math.sin(ra), Math.cos(ra)];
+    g.push({ t: 'TEXT', hh: e.hh, s: e.s, j: 1, rot, pts: [[m[0] + off[0] * 0.02 * k, m[1] + off[1] * 0.02 * k]] });
+    return { g, m };
+  }
+
+  function drawing(opt) {
+    opt = opt || {};
+    const D = { E: [], L: {}, lt: {}, ds: {}, px: opt.prefix || '', h: 1, k: 1, fmt: opt.fmt || fmtFtIn };
+    D.layer = (n, color, lt) => { const nm = (D.px + n).toUpperCase(); if (!D.L[nm]) D.L[nm] = { color: color == null ? 7 : color, lt: lt || 'CONTINUOUS' }; return nm; };
+    D.ltype = base => { const b = String(base || 'CONTINUOUS').toUpperCase(); if (!BASE_LT[b] || b === 'CONTINUOUS') return 'CONTINUOUS';
+      const nm = `${b}_${num(D.k).replace('.', 'P')}`; if (!D.lt[nm]) D.lt[nm] = BASE_LT[b].map(v => v * D.k * 0.4); return nm; };
+    const dstyle = () => { const nm = `SD${num(D.k).replace('.', 'P')}`; if (!D.ds[nm]) D.ds[nm] = { k: D.k, t: D.h / D.k }; return nm; };
+    D.mark = () => D.E.length;
+    D.line = (l, x1, y1, x2, y2, lt) => { D.E.push({ t: 'LINE', l, lt, pts: [[x1, y1], [x2, y2]] }); };
+    D.pline = (l, pts, closed, lt) => { D.E.push({ t: 'PL', l, lt, closed: !!closed, pts: pts.map(p => [p[0], p[1]]) }); };
+    D.rect = (l, x1, y1, x2, y2, lt) => D.pline(l, [[x1, y1], [x2, y1], [x2, y2], [x1, y2]], true, lt);
+    D.circle = (l, x, y, r) => { D.E.push({ t: 'CIRCLE', l, r, pts: [[x, y]] }); };
+    D.arc = (l, x, y, r, a0, a1) => { D.E.push({ t: 'ARC', l, r, a0, a1, pts: [[x, y]] }); };
+    D.solid = (l, pts) => { if (pts.length < 3 || pts.length > 4) throw new Error('SharedDxf solid: 3 or 4 corners'); D.E.push({ t: 'SOLID', l, pts: pts.map(p => [p[0], p[1]]) }); };
+    D.text = (l, x, y, hh, s, j, rot) => { D.E.push({ t: 'TEXT', l, hh, s: str(s), j: j || 0, rot: rot || 0, pts: [[x, y]] }); };
+    D.dim = (l, p1, p2, b, ang, txt) => {
+      ang = ang || 0; const u = [Math.cos(ang * Math.PI / 180), Math.sin(ang * Math.PI / 180)], pr = p => { const d = (p[0] - b[0]) * u[0] + (p[1] - b[1]) * u[1]; return [b[0] + u[0] * d, b[1] + u[1] * d]; };
+      const d1 = pr(p1), d2 = pr(p2), meas = Math.hypot(d2[0] - d1[0], d2[1] - d1[1]); if (meas < 1e-6) return;
+      D.E.push({ t: 'DIM', l, ang, meas, s: str((txt || '<>').replace('<>', D.fmt(meas))), ds: dstyle(), k: D.k, hh: D.h, pts: [[p1[0], p1[1]], [p2[0], p2[1]], d1, d2] });
+    };
+    D.dimH = (l, x1, x2, y, yref, txt) => D.dim(l, [x1, yref != null ? yref : y], [x2, yref != null ? yref : y], [x1, y], 0, txt);
+    D.dimV = (l, y1, y2, x, xref, txt) => D.dim(l, [xref != null ? xref : x, y1], [xref != null ? xref : x, y2], [x, y1], 90, txt);
+    /* runs of equal spacing become one dimension "n@s" (GirderDetail DxfW._runs) */
+    const runs = v => { const s = [...new Set(v.map(q => +q.toFixed(4)))].sort((a, b) => a - b), out = []; let i = 0;
+      while (i < s.length - 1) { const d = s[i + 1] - s[i]; let j = i + 1; while (j < s.length - 1 && Math.abs((s[j + 1] - s[j]) - d) < 1e-3) j++; out.push([s[i], s[j], j - i, d]); i = j; } return out; };
+    D.chainH = (l, xs, y, yref) => runs(xs).forEach(([a, b, n, d]) => D.dimH(l, a, b, y, yref, n > 1 ? `${n}@${D.fmt(d)}` : ''));
+    D.chainV = (l, ys, x, xref) => runs(ys).forEach(([a, b, n, d]) => D.dimV(l, a, b, x, xref, n > 1 ? `${n}@${D.fmt(d)}` : ''));
+    D.bbox = (i0, i1) => bbox(D.E, i0 || 0, i1 == null ? D.E.length : i1);
+    D.move = (i0, dx, dy) => { for (let i = i0 || 0; i < D.E.length; i++) D.E[i].pts.forEach(p => { p[0] += dx; p[1] += dy; }); };
+    D.toDXF = o => write(D, o || {});
+    return D;
+  }
+
+  /* extents of entities i0..i1 (text by an estimated width of one height per character) */
+  function bbox(E, i0, i1) {
+    const b = [Infinity, Infinity, -Infinity, -Infinity], a = (x, y) => { if (!isFinite(x) || !isFinite(y)) return; if (x < b[0]) b[0] = x; if (y < b[1]) b[1] = y; if (x > b[2]) b[2] = x; if (y > b[3]) b[3] = y; };
+    const txt = e => { const w = e.s.length * e.hh * 0.9, r = (e.rot || 0) * Math.PI / 180, sh = e.j === 2 ? -w : e.j === 1 ? -w / 2 : 0, c = Math.cos(r), s = Math.sin(r), x0 = e.pts[0][0] + sh * c, y0 = e.pts[0][1] + sh * s;
+      a(x0, y0); a(x0 + w * c, y0 + w * s); a(x0 - e.hh * s, y0 + e.hh * c); a(x0 + w * c - e.hh * s, y0 + w * s + e.hh * c); };
+    for (let i = i0; i < i1; i++) { const e = E[i];
+      if (e.t === 'TEXT') { txt(e); continue; }
+      if (e.t === 'CIRCLE' || e.t === 'ARC') { const [x, y] = e.pts[0]; a(x - e.r, y - e.r); a(x + e.r, y + e.r); continue; }
+      if (e.t === 'DIM') { dimGeo(e).g.forEach(q => (q.t === 'TEXT' ? txt(q) : q.pts.forEach(p => a(p[0], p[1])))); continue; }
+      e.pts.forEach(p => a(p[0], p[1])); }
+    return b;
+  }
+
+  /* ---------- DXF text ---------- */
+  function write(D, o) {
+    const out = [], g = (c, v) => out.push(String(c).padStart(3), String(v));
+    const ent = (e, lay) => { const L = lay || e.l;
+      if (e.t === 'LINE') { g(0, 'LINE'); g(8, L); if (e.lt) g(6, e.lt); g(10, num(e.pts[0][0])); g(20, num(e.pts[0][1])); g(30, 0); g(11, num(e.pts[1][0])); g(21, num(e.pts[1][1])); g(31, 0); return; }
+      if (e.t === 'SOLID') { const q = e.pts.length === 4 ? [e.pts[0], e.pts[1], e.pts[3], e.pts[2]] : [e.pts[0], e.pts[1], e.pts[2], e.pts[2]];   // DXF corner order: 1, 2, 4, 3 of the polygon
+        g(0, 'SOLID'); g(8, L); q.forEach((p, k) => { g(10 + k, num(p[0])); g(20 + k, num(p[1])); g(30 + k, 0); }); return; }
+      if (e.t === 'CIRCLE') { g(0, 'CIRCLE'); g(8, L); g(10, num(e.pts[0][0])); g(20, num(e.pts[0][1])); g(30, 0); g(40, num(e.r)); return; }
+      if (e.t === 'ARC') { g(0, 'ARC'); g(8, L); g(10, num(e.pts[0][0])); g(20, num(e.pts[0][1])); g(30, 0); g(40, num(e.r)); g(50, num(e.a0)); g(51, num(e.a1)); return; }
+      if (e.t === 'PL') { g(0, 'POLYLINE'); g(8, L); if (e.lt) g(6, e.lt); g(66, 1); g(10, 0); g(20, 0); g(30, 0); g(70, e.closed ? 1 : 0);
+        e.pts.forEach(p => { g(0, 'VERTEX'); g(8, L); g(10, num(p[0])); g(20, num(p[1])); g(30, 0); }); g(0, 'SEQEND'); g(8, L); return; }
+      if (e.t === 'TEXT') { const [x, y] = e.pts[0]; g(0, 'TEXT'); g(8, L); g(10, num(x)); g(20, num(y)); g(30, 0); g(40, num(e.hh)); g(1, e.s);
+        if (e.rot) g(50, num(e.rot)); if (e.j) { g(72, e.j); g(11, num(x)); g(21, num(y)); g(31, 0); } }
+    };
+    const used = D.E;
+    // linetypes and dimension styles actually used
+    const ltUsed = new Set(['CONTINUOUS']); used.forEach(e => e.lt && ltUsed.add(e.lt)); Object.values(D.L).forEach(q => ltUsed.add(q.lt));
+    const lts = [...ltUsed].map(nm => [nm, nm === 'CONTINUOUS' ? [] : (D.lt[nm] || BASE_LT[nm] || [])]);
+    const dsUsed = [...new Set(used.filter(e => e.t === 'DIM').map(e => e.ds))];
+    const b = bbox(used, 0, used.length), ok = isFinite(b[0]);
+    // HEADER
+    g(0, 'SECTION'); g(2, 'HEADER'); g(9, '$ACADVER'); g(1, 'AC1009'); g(9, '$INSBASE'); g(10, 0); g(20, 0); g(30, 0);
+    g(9, '$EXTMIN'); g(10, num(ok ? b[0] : 0)); g(20, num(ok ? b[1] : 0)); g(30, 0); g(9, '$EXTMAX'); g(10, num(ok ? b[2] : 0)); g(20, num(ok ? b[3] : 0)); g(30, 0);
+    g(9, '$LUNITS'); g(70, o.lunits || 4); g(9, '$LUPREC'); g(70, 3); g(9, '$LTSCALE'); g(40, num(o.ltscale || 1)); g(9, '$TEXTSTYLE'); g(7, 'STANDARD');
+    g(9, '$DIMSTYLE'); g(2, 'STANDARD'); g(9, '$INSUNITS'); g(70, o.insunits || 1); g(0, 'ENDSEC');
+    // TABLES
+    g(0, 'SECTION'); g(2, 'TABLES');
+    g(0, 'TABLE'); g(2, 'LTYPE'); g(70, lts.length);
+    lts.forEach(([nm, p]) => { const base = nm.split('_')[0]; g(0, 'LTYPE'); g(2, nm); g(70, 0); g(3, LT_DESC[base] || nm); g(72, 65); g(73, p.length); g(40, num(p.reduce((a, v) => a + Math.abs(v), 0))); p.forEach(v => g(49, num(v))); });
+    g(0, 'ENDTAB');
+    const lays = [['0', { color: 7, lt: 'CONTINUOUS' }], ...Object.entries(D.L).filter(([nm]) => nm !== '0')];
+    g(0, 'TABLE'); g(2, 'LAYER'); g(70, lays.length); lays.forEach(([nm, q]) => { g(0, 'LAYER'); g(2, nm); g(70, 0); g(62, q.color); g(6, q.lt); }); g(0, 'ENDTAB');
+    g(0, 'TABLE'); g(2, 'STYLE'); g(70, 1); g(0, 'STYLE'); g(2, 'STANDARD'); g(70, 0); g(40, 0); g(41, 1); g(50, 0); g(71, 0); g(42, 0.2); g(3, 'txt'); g(4, ''); g(0, 'ENDTAB');
+    const dss = [['STANDARD', { k: 1, t: 0.18 }], ...dsUsed.map(nm => [nm, D.ds[nm]])];
+    g(0, 'TABLE'); g(2, 'DIMSTYLE'); g(70, dss.length);
+    dss.forEach(([nm, q]) => { g(0, 'DIMSTYLE'); g(2, nm); g(70, 0); g(3, ''); g(4, ''); g(5, ''); g(6, ''); g(7, ''); g(40, num(q.k)); g(41, 0.07); g(42, 0.06); g(43, 0.38); g(44, 0.12);
+      g(45, 0); g(46, 0); g(47, 0); g(48, 0); g(140, num(q.t)); g(141, 0.09); g(142, 0.07); g(143, 25.4); g(144, 1); g(145, 0); g(146, 1); g(147, 0.05);
+      [71, 72, 73, 74, 75, 76].forEach(c => g(c, 0)); g(77, 1); g(78, 3); g(170, 0); g(171, 2); g(172, 1); [173, 174, 175, 176, 177, 178].forEach(c => g(c, 0)); });
+    g(0, 'ENDTAB'); g(0, 'ENDSEC');
+    // BLOCKS: one anonymous block per dimension (its geometry)
+    g(0, 'SECTION'); g(2, 'BLOCKS'); let di = 0; const dimBlk = new Map();
+    used.forEach(e => { if (e.t !== 'DIM') return; const G = dimGeo(e), nm = `*D${++di}`; dimBlk.set(e, { nm, G });
+      g(0, 'BLOCK'); g(8, '0'); g(2, nm); g(70, 1); g(10, 0); g(20, 0); g(30, 0); g(3, nm); G.g.forEach(q => ent(q, '0')); g(0, 'ENDBLK'); g(8, '0'); });
+    g(0, 'ENDSEC');
+    // ENTITIES
+    g(0, 'SECTION'); g(2, 'ENTITIES');
+    used.forEach(e => { if (e.t !== 'DIM') { ent(e); return; } const { nm, G } = dimBlk.get(e);
+      g(0, 'DIMENSION'); g(8, e.l); g(2, nm); g(3, e.ds); g(10, num(e.pts[3][0])); g(20, num(e.pts[3][1])); g(30, 0); g(11, num(G.m[0])); g(21, num(G.m[1])); g(31, 0); g(70, 0); g(1, e.s);
+      g(13, num(e.pts[0][0])); g(23, num(e.pts[0][1])); g(33, 0); g(14, num(e.pts[1][0])); g(24, num(e.pts[1][1])); g(34, 0); g(50, num(e.ang)); });
+    g(0, 'ENDSEC'); g(0, 'EOF');
+    return out.join('\r\n') + '\r\n';
+  }
+
+  /* ---------- SVG preview of the same entities ---------- */
+  const ACI = { 1: '#d22', 2: '#a07800', 3: '#1a8a3a', 4: '#08808a', 5: '#1f4fc4', 6: '#a3229a', 7: '#17212b', 8: '#6b7280', 9: '#9ca3af', 30: '#c96a10' };
+  function toSVG(D, opt) {
+    opt = opt || {}; const i0 = opt.i0 || 0, i1 = opt.i1 == null ? D.E.length : opt.i1, b = bbox(D.E, i0, i1);
+    if (!isFinite(b[0])) return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"></svg>';
+    const pad = opt.pad != null ? opt.pad : 0.02 * Math.max(b[2] - b[0], b[3] - b[1]), F = opt.frame;
+    const x0 = F ? F[0] : b[0] - pad, y1 = F ? F[3] : b[3] + pad, W = F ? F[2] - F[0] : b[2] - b[0] + 2 * pad, H = F ? F[3] - F[1] : b[3] - b[1] + 2 * pad;
+    const X = x => +(x - x0).toFixed(3), Y = y => +(y1 - y).toFixed(3), sw = Math.max(W, H) / 1500;
+    const col = l => ACI[(D.L[l] || {}).color] || ACI[7], esc = s => String(s).replace(/%%d/g, '°').replace(/%%c/g, 'Ø').replace(/%%p/g, '±').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const dash = lt => { if (!lt || lt === 'CONTINUOUS') return ''; const p = D.lt[lt] || BASE_LT[lt.split('_')[0]] || []; return p.length ? ` stroke-dasharray="${p.map(v => +Math.max(Math.abs(v), sw).toFixed(3)).join(' ')}"` : ''; };
+    const anc = j => j === 1 ? ' text-anchor="middle"' : j === 2 ? ' text-anchor="end"' : '';
+    const txt = (e, c) => `<text x="${X(e.pts[0][0])}" y="${Y(e.pts[0][1])}" font-size="${+e.hh.toFixed(3)}" fill="${c}"${anc(e.j)}${e.rot ? ` transform="rotate(${+(-e.rot).toFixed(3)} ${X(e.pts[0][0])} ${Y(e.pts[0][1])})"` : ''}>${esc(e.s)}</text>`;
+    const parts = [], fills = [], fo = opt.fill != null ? opt.fill : 0.4;
+    for (let i = i0; i < i1; i++) { const e = D.E[i], c = col(e.l), st = `stroke="${c}" stroke-width="${+sw.toFixed(4)}" fill="none"${dash(e.lt)}`;
+      if (e.t === 'SOLID') fills.push(`<polygon points="${e.pts.map(p => `${X(p[0])},${Y(p[1])}`).join(' ')}" fill="${c}" fill-opacity="${fo}" stroke="none"/>`);   // behind everything
+      else if (e.t === 'LINE') parts.push(`<line x1="${X(e.pts[0][0])}" y1="${Y(e.pts[0][1])}" x2="${X(e.pts[1][0])}" y2="${Y(e.pts[1][1])}" ${st}/>`);
+      else if (e.t === 'PL') parts.push(`<${e.closed ? 'polygon' : 'polyline'} points="${e.pts.map(p => `${X(p[0])},${Y(p[1])}`).join(' ')}" ${st}/>`);
+      else if (e.t === 'CIRCLE') parts.push(`<circle cx="${X(e.pts[0][0])}" cy="${Y(e.pts[0][1])}" r="${+e.r.toFixed(3)}" ${st}/>`);
+      else if (e.t === 'ARC') { const [cx, cy] = e.pts[0], r = e.r, a0 = e.a0 * Math.PI / 180, a1 = e.a1 * Math.PI / 180, sweep = ((e.a1 - e.a0) % 360 + 360) % 360;
+        parts.push(`<path d="M${X(cx + r * Math.cos(a0))} ${Y(cy + r * Math.sin(a0))}A${+r.toFixed(3)} ${+r.toFixed(3)} 0 ${sweep > 180 ? 1 : 0} 0 ${X(cx + r * Math.cos(a1))} ${Y(cy + r * Math.sin(a1))}" ${st}/>`); }
+      else if (e.t === 'TEXT') parts.push(txt(e, c));
+      else if (e.t === 'DIM') dimGeo(e).g.forEach(q => parts.push(q.t === 'TEXT' ? txt(q, c) : `<line x1="${X(q.pts[0][0])}" y1="${Y(q.pts[0][1])}" x2="${X(q.pts[1][0])}" y2="${Y(q.pts[1][1])}" stroke="${c}" stroke-width="${+sw.toFixed(4)}"/>`)); }
+    const w = opt.width ? ` width="${opt.width}"` : '';
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${+W.toFixed(3)} ${+H.toFixed(3)}"${w}${opt.cls ? ` class="${opt.cls}"` : ''} font-family="Arial, Helvetica, sans-serif" preserveAspectRatio="xMidYMid meet">${opt.title ? `<title>${esc(opt.title)}</title>` : ''}${opt.bg ? `<rect width="100%" height="100%" fill="${opt.bg}"/>` : ''}${fills.join('')}${parts.join('')}</svg>`;
+  }
+
+  /* ---------- interactive preview (browser): pan and zoom of a toSVG() drawing ---------- */
+  /* viewer(host, svg, opt) puts the SVG string svg in host with navigation by its viewBox (text stays vector at any zoom):
+     wheel zooms about the cursor (the page does not scroll while the wheel is over the drawing; at fit the wheel zooms in), drag pans
+     (left or middle button; one finger), two-finger pinch zooms and pans, double-click / double-tap fits; on-canvas +, − and Fit buttons.
+     opt: { height (CSS, default '70vh'), level (initial zoom, 1 = fit), max (default 64), onchange(level) }.
+     Returns { level(), set(level) (about the center), zoom(f, clientX, clientY), fit(), el (the svg), box }. */
+  function viewer(host, svg, opt) {
+    opt = opt || {}; const MAX = opt.max || 64, MIN = 0.5;
+    host.innerHTML = `<div class="sdx-view" style="position:relative;overflow:hidden;height:${opt.height || '70vh'};touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;background:#fff">${svg}`
+      + '<div class="sdx-btns" style="position:absolute;right:6px;top:6px;display:flex;gap:4px">'
+      + ['+', '−', 'Fit'].map((t, i) => `<button type="button" data-sdx="${['in', 'out', 'fit'][i]}" aria-label="${['Zoom in', 'Zoom out', 'Zoom to fit'][i]}" style="min-width:30px;height:28px;padding:0 6px;font:600 13px system-ui,sans-serif;background:rgba(255,255,255,.92);border:1px solid #9aa4b2;border-radius:4px;cursor:pointer">${t}</button>`).join('') + '</div></div>';
+    const box = host.firstElementChild, el = box.querySelector('svg');
+    const v0 = (el.getAttribute('viewBox') || '0 0 10 10').split(/[\s,]+/).map(Number), v = v0.slice();
+    el.setAttribute('preserveAspectRatio', 'xMidYMid meet'); el.style.width = '100%'; el.style.height = '100%'; el.style.display = 'block';
+    const apply = () => { el.setAttribute('viewBox', v.map(q => +q.toFixed(4)).join(' ')); if (opt.onchange) opt.onchange(level()); };
+    const level = () => v0[2] / v[2];
+    /* drawing units per screen pixel, and the drawing point under client (x, y) (xMidYMid meet) */
+    const geo = () => { const r = el.getBoundingClientRect(), k = Math.max(v[2] / (r.width || 1), v[3] / (r.height || 1)); return { r, k, ox: v[0] - (r.width * k - v[2]) / 2, oy: v[1] - (r.height * k - v[3]) / 2 }; };
+    const at = (cx, cy) => { const g = geo(); return [g.ox + (cx - g.r.left) * g.k, g.oy + (cy - g.r.top) * g.k]; };
+    function zoom(f, cx, cy) {
+      const L = level(), f2 = Math.max(MIN / L, Math.min(MAX / L, f)); if (Math.abs(f2 - 1) < 1e-9) return;
+      const p = cx == null ? [v[0] + v[2] / 2, v[1] + v[3] / 2] : at(cx, cy);
+      v[0] = p[0] - (p[0] - v[0]) / f2; v[1] = p[1] - (p[1] - v[1]) / f2; v[2] /= f2; v[3] /= f2; apply();
+    }
+    const fit = () => { for (let i = 0; i < 4; i++) v[i] = v0[i]; apply(); };
+    const set = L => { if (!(L > 0)) return; if (Math.abs(L - 1) < 1e-9) { fit(); return; } zoom(L / level()); };
+    const pan = (dx, dy) => { const k = geo().k; v[0] -= dx * k; v[1] -= dy * k; apply(); };
+    el.addEventListener('wheel', e => { e.preventDefault(); zoom(Math.exp(-Math.max(-300, Math.min(300, e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY)) * 0.0015), e.clientX, e.clientY); }, { passive: false });
+    box.addEventListener('wheel', e => e.preventDefault(), { passive: false });
+    const P = new Map(); let last = null, tap = 0;
+    el.addEventListener('pointerdown', e => { if (e.button !== 0 && e.button !== 1) return; e.preventDefault(); el.setPointerCapture && el.setPointerCapture(e.pointerId); P.set(e.pointerId, [e.clientX, e.clientY]); last = null; box.style.cursor = 'grabbing';
+      if (e.pointerType === 'touch' && P.size === 1) { const t = Date.now(); if (t - tap < 300) { fit(); tap = 0; } else tap = t; } });
+    el.addEventListener('pointermove', e => { if (!P.has(e.pointerId)) return; const q = P.get(e.pointerId), dx = e.clientX - q[0], dy = e.clientY - q[1];
+      if (P.size === 1) { P.set(e.pointerId, [e.clientX, e.clientY]); pan(dx, dy); return; }
+      P.set(e.pointerId, [e.clientX, e.clientY]); const [a, b] = [...P.values()], m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      if (last) { pan(m[0] - last.m[0], m[1] - last.m[1]); if (last.d > 0 && d > 0) zoom(d / last.d, m[0], m[1]); } last = { m, d }; });
+    const up = e => { P.delete(e.pointerId); last = null; if (!P.size) box.style.cursor = 'grab'; };
+    el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+    el.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
+    el.addEventListener('dblclick', e => { e.preventDefault(); fit(); });
+    box.querySelectorAll('[data-sdx]').forEach(b => b.addEventListener('click', () => { const k = b.dataset.sdx; if (k === 'fit') fit(); else zoom(k === 'in' ? 1.5 : 1 / 1.5); }));
+    if (opt.level && opt.level !== 1) requestAnimationFrame(() => set(opt.level));
+    return { level, set, zoom, fit, el, box };
+  }
+
+  /* ---------- printing the sheets (browser; 2026-11-03, engineer's request) ---------- */
+  /* sheetSVG(D, s, opt): sheet s as an SVG whose viewBox is its outer border, so the SVG scaled to the paper is the sheet at its plot scale */
+  function sheetSVG(D, s, opt) { return toSVG(D, Object.assign({ i0: s.i0, i1: s.i1, bg: '#fff', title: s.title, frame: [s.ox || 0, 0, (s.ox || 0) + s.W, s.H] }, opt || {})); }
+  /* the outer border of a sheet, SHEET_INSET paper inches inside the paper edge (the sheet itself stays W x H: sheetSVG prints the whole
+     paper, so the scale is unchanged and the border lands 0.25 in inside the page edge) */
+  const SHEET_INSET = 0.25;
+  function sheetBorder(D, l, ox, W, H, k) { const e = SHEET_INSET * k; return D.rect(l, ox + e, e, ox + W - e, H - e); }
+  const PRINT_NOTE = 'Print sheet / Print all sheets: one 11 × 17 in (B-size) landscape page per sheet, each at its plot scale, through the browser\'s print dialog (choose Save as PDF there). '
+    + 'If the dialog does not pick it up, choose paper Tabloid / 11 × 17 (Ledger), Landscape, Margins None and Scale 100 % (Actual size / Default).';
+  const PR = { done: null };
+  const MBOX = ['top-left-corner', 'top-left', 'top-center', 'top-right', 'top-right-corner', 'right-top', 'right-middle', 'right-bottom', 'bottom-right-corner',
+    'bottom-right', 'bottom-center', 'bottom-left', 'bottom-left-corner', 'left-bottom', 'left-middle', 'left-top'];
+  /* printSheets(items, opt): a print box with one page per sheet (#sdx-print, a direct child of body) and a style that, only while printing,
+     shows that box alone on named pages "sdxsheet" (size w × h in, margin 0, no margin boxes; !important and moved last in the head at
+     beforeprint, so the tools' unnamed @page rules, e.g. the Report's letter pages, running header and page numbers, do not apply to
+     them: Chromium lets a later unnamed @page override an earlier named one), and the selectors outrank the Report's print rules
+     (shared/report.js body.rp-printing), so a tool's own beforeprint handler (which prepares its Report) cannot take the pages over. The box,
+     the style and the body class are removed after printing (afterprint). Without printSheets nothing of this is in the page: Ctrl+P and
+     the browser's Print print the Report as before. */
+  function printSheets(items, opt) {
+    opt = opt || {}; const pw = (opt.paper || [17, 11])[0], ph = (opt.paper || [17, 11])[1], warn = [];
+    if (typeof document === 'undefined' || !items || !items.length) return { pages: 0, warn: ['nothing to print'] };
+    if (PR.done) PR.done();
+    const B = 'html body.sdx-printing', css = document.createElement('style'); css.id = 'sdx-print-css';
+    css.textContent = `@page sdxsheet{size:${pw}in ${ph}in!important;margin:0!important;${MBOX.map(m => `@${m}{content:none!important;}`).join('')}}
+#sdx-print{display:none;}
+@media print{
+  ${B}>*:not(#sdx-print):not(#sdx-print){display:none!important;}
+  html:has(body.sdx-printing),${B}{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;margin:0!important;padding:0!important;border:0!important;background:#fff!important;zoom:1!important;transform:none!important;}
+  ${B}>div#sdx-print#sdx-print{display:block!important;visibility:visible!important;position:static!important;margin:0!important;padding:0!important;zoom:1!important;transform:none!important;}
+  ${B}>div#sdx-print#sdx-print>.sdx-sheet{page:sdxsheet;display:block!important;visibility:visible!important;width:${pw}in;height:${ph}in;margin:0;padding:0;overflow:hidden;break-inside:avoid;break-before:auto;break-after:page;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  ${B}>div#sdx-print#sdx-print>.sdx-sheet:last-child{break-after:auto;}
+  ${B}>div#sdx-print#sdx-print>.sdx-sheet>svg{display:block!important;visibility:visible!important;width:${pw}in!important;height:${ph}in!important;max-width:none!important;}
+}`;
+    const box = document.createElement('div'); box.id = 'sdx-print'; box.setAttribute('aria-hidden', 'true');
+    box.innerHTML = items.map(it => `<div class="sdx-sheet">${typeof it === 'string' ? it : it.svg}</div>`).join('');
+    box.querySelectorAll('.sdx-sheet>svg').forEach((el, i) => {
+      el.setAttribute('width', pw + 'in'); el.setAttribute('height', ph + 'in'); el.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+      const v = (el.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number);
+      if (v.length === 4 && v[2] > 0 && v[3] > 0 && Math.abs(v[2] / v[3] - pw / ph) > 0.002 * pw / ph) warn.push(`sheet ${i + 1}: its proportions (${+(v[2] / v[3]).toFixed(4)}) are not the paper's (${+(pw / ph).toFixed(4)}); printed to fit, not at its plot scale`);
+    });
+    document.head.appendChild(css); document.body.appendChild(box); document.body.classList.add('sdx-printing');
+    let late = null;
+    function done() {
+      PR.done = null; window.removeEventListener('afterprint', after); window.removeEventListener('beforeprint', before);
+      if (late) { ['pointerdown', 'keydown', 'focus'].forEach(t => window.removeEventListener(t, late, true)); late = null; }
+      document.body.classList.remove('sdx-printing'); box.remove(); css.remove();
+    }
+    function after() { setTimeout(() => { if (PR.done === done) done(); }, 0); }
+    /* last in the head when printing starts, after any style a tool's beforeprint handler adds (its @page rules) */
+    function before() { if (css.isConnected) document.head.appendChild(css); }
+    PR.done = done; window.addEventListener('afterprint', after); window.addEventListener('beforeprint', before);
+    if (warn.length && window.console) console.warn('SharedDxf.printSheets: ' + warn.join('; '));
+    try { (opt.print || window.print).call(window); }
+    finally {
+      /* print() returns when the dialog closes in Chrome, Edge and Firefox (afterprint restores the page); where it returns at once, the
+         page is also restored on the next click, key or focus after the dialog */
+      setTimeout(() => { if (PR.done !== done) return; late = () => setTimeout(() => { if (PR.done === done) done(); }, 0); ['pointerdown', 'keydown', 'focus'].forEach(t => window.addEventListener(t, late, true)); }, 500);
+    }
+    return { pages: items.length, warn };
+  }
+
+  /* ---------- reading back (tests, self-checks) ---------- */
+  function parse(text) {
+    const ln = String(text).split(/\r?\n/); if (ln[ln.length - 1] === '') ln.pop();
+    const errors = [], pairs = [];
+    if (ln.length % 2) errors.push(`odd number of lines (${ln.length}): group codes and values must come in pairs`);
+    for (let i = 0; i + 1 < ln.length; i += 2) { const c = ln[i].trim(); if (!/^-?\d+$/.test(c)) errors.push(`line ${i + 1}: group code "${ln[i]}" is not an integer`); pairs.push([parseInt(c, 10), ln[i + 1]]); }
+    const sections = {}, order = []; let i = 0;
+    while (i < pairs.length) { const [c, v] = pairs[i];
+      if (c === 0 && v === 'EOF') break;
+      if (c === 0 && v === 'SECTION') { const nm = pairs[i + 1] && pairs[i + 1][0] === 2 ? pairs[i + 1][1] : '?', body = []; i += 2;
+        while (i < pairs.length && !(pairs[i][0] === 0 && (pairs[i][1] === 'ENDSEC' || pairs[i][1] === 'EOF' || pairs[i][1] === 'SECTION'))) body.push(pairs[i++]);
+        if (!pairs[i] || pairs[i][1] !== 'ENDSEC') errors.push(`section ${nm} has no ENDSEC`); else i++;
+        sections[nm] = body; order.push(nm); continue; }
+      errors.push(`pair ${i}: (${c}, ${v}) outside a section`); i++; }
+    // split a list of pairs into records starting at group 0
+    const recs = body => { const out = []; (body || []).forEach(p => { if (p[0] === 0) out.push({ type: p[1], codes: [] }); else if (out.length) out[out.length - 1].codes.push(p); }); return out; };
+    const get = (r, c) => { const p = r.codes.find(q => q[0] === c); return p ? p[1] : undefined; };
+    const all = (r, c) => r.codes.filter(q => q[0] === c).map(q => q[1]);
+    // tables
+    const tables = {}; let cur = null; recs(sections.TABLES).forEach(r => { if (r.type === 'TABLE') { cur = get(r, 2); tables[cur] = []; } else if (r.type === 'ENDTAB') cur = null; else if (cur) tables[cur].push(r); });
+    // blocks
+    const blocks = {}; let bk = null; recs(sections.BLOCKS).forEach(r => { if (r.type === 'BLOCK') { bk = { name: get(r, 2), ents: [] }; blocks[bk.name] = bk; } else if (r.type === 'ENDBLK') bk = null; else if (bk) bk.ents.push(r); });
+    // entities, with POLYLINE vertices folded in
+    const entities = []; let pl = null;
+    recs(sections.ENTITIES).forEach(r => { if (r.type === 'VERTEX' && pl) { pl.verts.push([+get(r, 10), +get(r, 20)]); return; } if (r.type === 'SEQEND') { if (!pl) errors.push('SEQEND without POLYLINE'); pl = null; return; }
+      if (pl) { errors.push('POLYLINE without SEQEND'); pl = null; }
+      const e = { type: r.type, layer: get(r, 8), lt: get(r, 6), codes: r.codes, get: c => get(r, c), all: c => all(r, c) }; if (r.type === 'POLYLINE') { e.verts = []; e.closed = (+get(r, 70) & 1) === 1; pl = e; } entities.push(e); });
+    if (pl) errors.push('POLYLINE without SEQEND at the end of ENTITIES');
+    const eof = pairs.length && pairs[pairs.length - 1][0] === 0 && pairs[pairs.length - 1][1] === 'EOF';
+    return { pairs, sections, order, tables, blocks, entities, eof, errors };
+  }
+  function validate(text) {
+    const R = parse(text), errors = R.errors.slice(), H = R.sections.HEADER || [];
+    if (!R.eof) errors.push('the file does not end with 0 EOF');
+    if (R.order[0] !== 'HEADER') errors.push('the first section is not HEADER');
+    const iv = H.findIndex(p => p[0] === 9 && p[1] === '$ACADVER'); if (iv < 0 || !H[iv + 1] || H[iv + 1][1] !== 'AC1009') errors.push('$ACADVER is not AC1009 (R12)');
+    if (!R.sections.ENTITIES) errors.push('no ENTITIES section');
+    const names = t => new Set((R.tables[t] || []).map(r => (r.codes.find(q => q[0] === 2) || [])[1]));
+    const lay = names('LAYER'), lts = names('LTYPE'), dss = names('DIMSTYLE');
+    (R.tables.LAYER || []).forEach(r => { const lt = (r.codes.find(q => q[0] === 6) || [])[1]; if (lt && !lts.has(lt)) errors.push(`layer ${(r.codes.find(q => q[0] === 2) || [])[1]}: linetype ${lt} not defined`); });
+    const counts = {};
+    R.entities.forEach(e => { counts[e.type] = (counts[e.type] || 0) + 1;
+      if (e.layer == null) errors.push(`${e.type} without a layer`); else if (!lay.has(e.layer)) errors.push(`${e.type} on undefined layer ${e.layer}`);
+      if (e.lt && !lts.has(e.lt)) errors.push(`${e.type} with undefined linetype ${e.lt}`);
+      if (e.type === 'DIMENSION') { const bn = e.get(2), ds = e.get(3); if (!R.blocks[bn]) errors.push(`DIMENSION block ${bn} not defined`); if (ds && !dss.has(ds)) errors.push(`DIMENSION style ${ds} not defined`); }
+      if (e.type === 'POLYLINE' && e.verts.length < 2) errors.push('POLYLINE with fewer than 2 vertices');
+      [10, 20, 11, 21, 40, 50, 51].forEach(c => { const v = e.get(c); if (v !== undefined && !isFinite(+v)) errors.push(`${e.type}: group ${c} = "${v}" is not a number`); }); });
+    return { ok: !errors.length, errors, counts, layers: [...lay] };
+  }
+
+  /* ---------- saving (browser) ---------- */
+  function download(text, filename) {
+    const name = String(filename || 'drawing.dxf').replace(/[^\w.\- ]+/g, '_'), blob = new Blob([text], { type: 'application/dxf' });
+    if (typeof navigator !== 'undefined' && navigator.msSaveOrOpenBlob) { navigator.msSaveOrOpenBlob(blob, name); return; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = /\.dxf$/i.test(name) ? name : name + '.dxf';
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+  }
+
+  window.SharedDxf = { drawing, toSVG, sheetSVG, sheetBorder, SHEET_INSET, printSheets, PRINT_NOTE, viewer, str, frac, fmtIn, fmtFtIn, num, dimGeo, bbox, parse, validate, download, ACI };
+})();
+
+</script>
 <script>
 const DEG = Math.PI/180;
 
@@ -2327,6 +2743,320 @@ function bind3D(){
    The top elevation is read from the platform model at the tie-in, so the
    chain follows whatever the platform does.
    ============================================================ */
+/* ============================================================
+   SHEETS AND DXF
+   11 x 17 sheets drawn with SharedDxf (the All-Structural shared DXF writer, copied in above):
+   one display list in model space, full size in inches; each sheet is a border and title block
+   at its plot scale around its views. The preview is drawn from the same entities as the file.
+   Sheets: a plan of each ramp / stair, the developed elevation of every wall (two to a sheet),
+   the column foundations on spread footings, then the wall and column schedules and notes.
+   ============================================================ */
+const SHT={W:17,H:11,m:0.375,tbH:0.9,cur:null,B:null,key:'pge_sheet_v1'};
+const SHT_SCALES=[[4,'3" = 1\'-0"'],[6,'2" = 1\'-0"'],[8,'1 1/2" = 1\'-0"'],[12,'1" = 1\'-0"'],[16,'3/4" = 1\'-0"'],[24,'1/2" = 1\'-0"'],[32,'3/8" = 1\'-0"'],[48,'1/4" = 1\'-0"'],[64,'3/16" = 1\'-0"'],[96,'1/8" = 1\'-0"'],[192,'1/16" = 1\'-0"']];
+const shFI=inch=>SharedDxf.fmtFtIn(inch);
+
+function sheetsBuild(){
+  const D=SharedDxf.drawing({prefix:'S-'}), S=[];
+  const L={conc:D.layer('CONC',7), ftg:D.layer('CONC-FTG',8,'HIDDEN'), grade:D.layer('GRADE',3,'DASHED'), walk:D.layer('WALK',30,'HIDDEN'),
+    xw:D.layer('XWALL',4,'HIDDEN'), stl:D.layer('STEEL',5), dim:D.layer('DIMS',2), txt:D.layer('TEXT',7), el:D.layer('ELEV',1),
+    cl:D.layer('CNTR',8,'CENTER'), plat:D.layer('PLAT',4), grid:D.layer('GRID',8,'CENTER'), tb:D.layer('TBLK',7), br:D.layer('BRDR',7)};
+  const gv=id=>{ const e=document.getElementById(id); return e&&e.value?e.value:''; };
+  const meta={proj:gv('sh_proj')||(CURNAME||'PLATFORM'), no:gv('sh_no'), by:gv('sh_by'), date:gv('sh_date'), chk:gv('sh_chk'), cdate:gv('sh_cdate')};
+  const AW=SHT.W-2*SHT.m-0.4, AH=SHT.H-2*SHT.m-SHT.tbH-0.45;
+  let ox=0;
+  const T=(l,x,y,hh,s,j,rot)=>D.text(l,x,y,hh,s,j||0,rot||0);
+
+  /* one sheet: content(k) draws around (0,0); the largest standard scale at which it fits is used */
+  function sheet(id,title,content,fixedK){
+    const i0=D.mark(); let k=null, over=false;
+    const ks=fixedK?[fixedK]:SHT_SCALES.map(s=>s[0]);
+    for(const kk of ks){ D.E.length=i0; D.k=kk; D.h=0.09*kk; content(kk); const b=D.bbox(i0);
+      if(!isFinite(b[0])||((b[2]-b[0])/kk<=AW&&(b[3]-b[1])/kk<=AH)){ k=kk; break; } }
+    if(k===null){ k=ks[ks.length-1]; over=true; }
+    const b=D.bbox(i0), W=SHT.W*k, H=SHT.H*k, mm=SHT.m*k, tb=SHT.tbH*k;
+    const cx=ox+W/2, cy=mm+tb+0.2*k+(AH*k)/2+0.1*k;
+    if(isFinite(b[0])) D.move(i0,cx-(b[0]+b[2])/2,cy-(b[1]+b[3])/2);
+    D.k=k; D.h=0.09*k;
+    SharedDxf.sheetBorder(D,L.br,ox,W,H,k); D.rect(L.br,ox+mm,mm,ox+W-mm,H-mm);
+    // title block: two rows along the bottom
+    const x0=ox+mm, y0=mm, w=(SHT.W-2*SHT.m)*k, r=tb/2, sc=k===1?'NTS':(SHT_SCALES.find(q=>q[0]===k)||[0,'1:'+k])[1];
+    D.rect(L.tb,x0,y0,x0+w,y0+tb); D.line(L.tb,x0,y0+r,x0+w,y0+r);
+    const row1=[['PROJECT',meta.proj,4.6],['PROJECT NO.',meta.no,1.9],['DESIGNED BY',meta.by,1.7],['DATE',meta.date,1.5],['CHECKED BY',meta.chk,1.7],['DATE',meta.cdate,1.5],['SCALE',sc,3.35]];
+    const row2=[['SHEET TITLE',title,9.1],['STRUCTURE',(CURNAME||'PLATFORM')+' PLATFORM, RAMPS AND STAIRS',4.0],['SHEET','?',3.15]];
+    let sheetEnt=null;
+    [[row1,y0+r],[row2,y0]].forEach(([row,yb])=>{ let x=x0; row.forEach(([lab,val,cw],ci)=>{
+      T(L.tb,x+0.05*k,yb+r-0.1*k,0.06*k,lab);
+      const mx=Math.floor((cw-0.12)/(0.12*0.9)); T(L.tb,x+0.05*k,yb+0.1*k,0.12*k,String(val==null||val===''?'-':val).toUpperCase().slice(0,mx));
+      if(lab==='SHEET') sheetEnt=D.E[D.E.length-1];
+      x+=cw*k; if(ci<row.length-1) D.line(L.tb,x,yb,x,yb+r); }); });
+    const sh={id,title,k,i0,i1:D.mark(),ox,W,H,over,sheetEnt}; S.push(sh); ox+=W+1*k; return sh;
+  }
+  /* the scale content(k) would get, without keeping it */
+  const fitK=content=>{ const i0=D.mark(); let k=null;
+    for(const [kk] of SHT_SCALES){ D.E.length=i0; D.k=kk; D.h=0.09*kk; content(kk); const b=D.bbox(i0);
+      if(!isFinite(b[0])||((b[2]-b[0])/kk<=AW&&(b[3]-b[1])/kk<=AH)){ k=kk; break; } }
+    D.E.length=i0; return k==null?Infinity:k; };
+  /* views stacked top to bottom on one sheet, centred on each other */
+  const stack=(views,k,gap)=>{ let yb=null;
+    views.forEach(v=>{ const i0=D.mark(); v(k); const b=D.bbox(i0); if(!isFinite(b[0])) return;
+      if(yb==null){ yb=b[1]; return; }
+      D.move(i0,0,yb-(gap||0.55)*k-b[3]); yb=D.bbox(i0)[1]; }); };
+  const viewTitle=(x,y,k,t,sub)=>{ T(L.txt,x,y,0.15*k,t,1); D.line(L.txt,x-t.length*0.15*k*0.45,y-0.05*k,x+t.length*0.15*k*0.45,y-0.05*k);
+    if(sub) T(L.txt,x,y-0.24*k,0.09*k,sub,1); };
+
+  /* ---------- a wall, developed elevation (inches; x along the wall, y elevation) ---------- */
+  function wallView(R,wl,k){
+    const P=wl.pts, N=P.length, Wd=R.WALL, t0=P[0].t, tN=P[N-1].t, toe=Math.max(0,(Wd.fw-Wd.t)/2);
+    const hasF=P.every(q=>q.ftgBot!=null), hasG=P.every(q=>q.grade!=null), stw=wl.kind==='stair';
+    const zb=Math.floor(Math.min(...P.map(q=>hasF?q.ftgBot:q.top-4)));
+    const X=t=>(t-t0)*12, Y=z=>(z-zb)*12;
+    const surf=q=>stw?R.z0:(q.surf!=null?q.surf:q.top-Wd.curb);
+    // footing and stem
+    if(hasF){
+      D.pline(L.conc,[[X(t0-toe),Y(P[0].ftgTop)],...P.map(q=>[X(q.t),Y(q.ftgTop)]),[X(tN+toe),Y(P[N-1].ftgTop)],[X(tN+toe),Y(P[N-1].ftgBot)],
+        ...P.slice().reverse().map(q=>[X(q.t),Y(q.ftgBot)]),[X(t0-toe),Y(P[0].ftgBot)]],true);
+      D.pline(L.conc,[...P.map(q=>[X(q.t),Y(q.top)]),...P.slice().reverse().map(q=>[X(q.t),Y(q.ftgTop)])],true);
+    } else D.pline(L.conc,P.map(q=>[X(q.t),Y(q.top)]),false);
+    if(hasG) D.pline(L.grade,[[X(t0-toe)-18,Y(P[0].grade)],...P.map(q=>[X(q.t),Y(q.grade)]),[X(tN+toe)+18,Y(P[N-1].grade)]],false);
+    D.pline(L.walk,P.map(q=>[X(q.t),Y(surf(q))]),false);
+    // walls that meet or cross this one, end-on
+    { const A0=P[0], A1=P[N-1]; let ux=A1.x-A0.x, uy=A1.y-A0.y; const la=Math.hypot(ux,uy);
+      if(la>1e-6){ ux/=la; uy/=la;
+        R.walls.forEach(wb=>{ if(wb===wl) return; const Q=wb.pts, B0=Q[0], B1=Q[Q.length-1]; let vx=B1.x-B0.x, vy=B1.y-B0.y; const lb=Math.hypot(vx,vy); if(lb<1e-6) return; vx/=lb; vy/=lb;
+          const den=ux*vy-uy*vx; if(Math.abs(den)<0.2) return; const dx=B0.x-A0.x, dy=B0.y-A0.y, ta=(dx*vy-dy*vx)/den, tb=(dx*uy-dy*ux)/den, sl=Wd.t+0.05;
+          if(ta<-sl||ta>la+sl||tb<-sl||tb>lb+sl) return;
+          const tq=Q[0].t+Math.max(0,Math.min(lb,tb)); let j=0; while(j<Q.length-2&&Q[j+1].t<tq) j++;
+          const a=Q[j], b=Q[Math.min(j+1,Q.length-1)], f=(b.t-a.t)>1e-9?Math.max(0,Math.min(1,(tq-a.t)/(b.t-a.t))):0, I=(u,v)=>u==null||v==null?null:u+(v-u)*f;
+          const tc=t0+ta, top=I(a.top,b.top), ft=I(a.ftgTop,b.ftgTop), fb=I(a.ftgBot,b.ftgBot);
+          if(ft!=null){ D.rect(L.xw,X(tc-Wd.t/2),Y(ft),X(tc+Wd.t/2),Y(top)); D.rect(L.xw,X(tc-Wd.fw/2),Y(fb),X(tc+Wd.fw/2),Y(ft)); }
+          T(L.xw,X(tc),Y(top)-0.25*k,0.08*k,wb.name,1); }); } }
+    // columns on pads: grout, base plate, column stub
+    (R.pads||[]).filter(pd=>pd.ok&&pd.col&&pd.wall===wl.name).forEach(pd=>{
+      const hb=pd.csz/2+4/12, hc=pd.csz/2, stub=Math.max(1.5,pd.csz*3), x=X(pd.tc);
+      D.rect(L.stl,x-hb*12,Y(pd.top),x+hb*12,Y(pd.bobp)); D.rect(L.stl,x-hb*12,Y(pd.bobp),x+hb*12,Y(pd.tobp));
+      const yt=Y(pd.tobp+stub);
+      D.pline(L.stl,[[x-hc*12,Y(pd.tobp)],[x-hc*12,yt],[x-1.5,yt-2],[x+1.5,yt+2],[x+hc*12,yt],[x+hc*12,Y(pd.tobp)]],false);
+      T(L.txt,x,yt+0.12*k,0.075*k,'HSS '+(pd.csz*12).toFixed(0)+'x'+(pd.csz*12).toFixed(0),1);
+      D.line(L.el,x,Y(pd.bobp),x,Y(pd.top)-0.3*k);
+      T(L.el,x,Y(pd.top)-0.42*k,0.085*k,'BOBP '+pd.bobp.toFixed(2),1);
+      T(L.txt,x,Y(pd.top)-0.56*k,0.07*k,(pd.grout*12).toFixed(0)+'" GROUT, '+(pd.bplate*12).toFixed(0)+'" PLATE',1); });
+    // top of wall at every end, break and pad, in rows above the wall so none overlap
+    const call=[], seen={};
+    P.forEach((q,j)=>{ if(j>0&&Math.abs(q.t-P[j-1].t)<1e-4&&Math.abs(q.top-P[j-1].top)<1e-4) return;
+      if(q.pad){ if(seen[q.pad]) return; seen[q.pad]=1; const ps=P.filter(r=>r.pad===q.pad); call.push({x:X((ps[0].t+ps[ps.length-1].t)/2),y:Y(q.top),s:q.pad+' PAD '+q.top.toFixed(2)}); return; }
+      call.push({x:X(q.t),y:Y(q.top),s:'TOW '+q.top.toFixed(2)}); });
+    call.sort((a,b)=>a.x-b.x);
+    const stubTops=(R.pads||[]).filter(pd=>pd.ok&&pd.col&&pd.wall===wl.name).map(pd=>Y(pd.tobp+Math.max(1.5,pd.csz*3))+0.25*k);
+    const yTop=Math.max(...P.map(q=>Y(q.top)),...stubTops), rowEnd=[];
+    call.forEach(c=>{ const w=c.s.length*0.09*k*0.9+0.1*k; let r=0; while(rowEnd[r]!=null&&rowEnd[r]>c.x-w/2) r++; rowEnd[r]=c.x+w/2;
+      const yl=yTop+(0.3+r*0.17)*k; D.line(L.el,c.x,c.y,c.x,yl-0.03*k); T(L.el,c.x,yl,0.09*k,c.s,1); });
+    // slope of each sloping stretch, along it
+    for(let j=0;j<N-1;j++){ const a=P[j], b=P[j+1], dt=b.t-a.t, dz=b.top-a.top; if(dt<3||Math.abs(dz)<1e-3) continue;
+      const ang=Math.atan2(dz,dt)*180/Math.PI, xm=X((a.t+b.t)/2), ym=Y((a.top+b.top)/2)-0.16*k;
+      T(L.txt,xm,ym,0.075*k,'TOW '+(Math.abs(dz)/dt*100).toFixed(2)+'% (1:'+(dt/Math.abs(dz)).toFixed(2)+')',1,ang); }
+    // ends: elevations and vertical dimension chains
+    [[0,-1],[N-1,1]].forEach(([j,sd])=>{ const q=P[j], xe=X(q.t)+sd*(hasF?toe*12:0), xa=xe+sd*0.45*k, xb=xe+sd*0.9*k, xt=xb+sd*0.12*k, jj=sd<0?2:0;
+      if(hasF){ const zs=[q.top]; if(hasG&&q.grade<q.top&&q.grade>q.ftgTop) zs.push(q.grade); zs.push(q.ftgTop,q.ftgBot);
+        for(let i=0;i<zs.length-1;i++) D.dimV(L.dim,Y(zs[i+1]),Y(zs[i]),xa,X(q.t));
+        D.dimV(L.dim,Y(q.ftgBot),Y(q.top),xb,X(q.t));
+        T(L.el,xt,Y(q.top)-0.04*k,0.08*k,'TOW '+q.top.toFixed(2),jj);
+        if(hasG) T(L.el,xt,Y(q.grade)-0.04*k,0.08*k,'GR '+q.grade.toFixed(2),jj);
+        T(L.el,xt,Y(q.ftgTop)-0.04*k,0.08*k,'TOF '+q.ftgTop.toFixed(2),jj);
+        T(L.el,xt,Y(q.ftgBot)-0.04*k,0.08*k,'BOF '+q.ftgBot.toFixed(2),jj); } });
+    // curb at the middle of the longest sloping stretch
+    if(!stw){ let jb=-1,best=0; for(let j=0;j<N-1;j++){ const dt=P[j+1].t-P[j].t; if(dt>best&&!P[j].pad&&!P[j+1].pad){best=dt;jb=j;} }
+      if(jb>=0){ const a=P[jb], b=P[jb+1], tm=a.t+(b.t-a.t)*0.25, f=(tm-a.t)/(b.t-a.t), zt=a.top+(b.top-a.top)*f, zs2=surf(a)+(surf(b)-surf(a))*f;
+        D.dimV(L.dim,Y(zs2),Y(zt),X(tm)+0.6*k,X(tm),(Math.round((zt-zs2)*12))+'" CURB'); } }
+    // horizontal chains: each stretch, footing toes, wall, footing
+    const yF=hasF?Math.min(...P.map(q=>Y(q.ftgBot))):Math.min(...P.map(q=>Y(q.top)));
+    const xs=[]; P.forEach(q=>{ const x=X(q.t); if(!xs.length||x-xs[xs.length-1]>0.05) xs.push(x); });
+    const y1=yF-0.35*k, y2=yF-0.7*k, y3=yF-1.05*k;
+    if(hasF&&toe>0){ D.dimH(L.dim,X(t0-toe),X(t0),y1,yF); D.dimH(L.dim,X(tN),X(tN+toe),y1,yF); }
+    for(let i=0;i<xs.length-1;i++) D.dimH(L.dim,xs[i],xs[i+1],y1,yF);
+    D.dimH(L.dim,X(t0),X(tN),y2,null,'<> WALL');
+    if(hasF&&toe>0) D.dimH(L.dim,X(t0-toe),X(tN+toe),y3,null,'<> FOOTING');
+    if(hasF){ const lv=P.every(q=>Math.abs(q.ftgBot-P[0].ftgBot)<1e-4); if(lv) T(L.txt,(X(t0)+X(tN))/2,yF+0.08*k,0.075*k,'BOTTOM OF FOOTING LEVEL AT '+P[0].ftgBot.toFixed(2),1); }
+    viewTitle((X(t0)+X(tN))/2,y3-0.45*k,k,(R.ch.name+' - '+wl.name).toUpperCase(),(wl.desc+' - developed elevation').toUpperCase());
+  }
+
+  /* ---------- a column on a spread footing: elevation and plan ---------- */
+  function cfView(Rc,k){
+    const zb=Math.floor(Rc.bof), Y=z=>(z-zb)*12, hw=Rc.fW/2*12, hp=Rc.ped/2*12, hb=(Rc.hss/2+4/12)*12, hc=Rc.hss/2*12, stub=Math.max(2,Rc.hss*3);
+    // elevation
+    D.rect(L.conc,-hw,Y(Rc.bof),hw,Y(Rc.tof)); D.rect(L.conc,-hp,Y(Rc.tof),hp,Y(Rc.topPed));
+    D.rect(L.stl,-hb,Y(Rc.topPed),hb,Y(Rc.bobp)); D.rect(L.stl,-hb,Y(Rc.bobp),hb,Y(Rc.tobp));
+    const yt=Y(Rc.tobp+stub); D.pline(L.stl,[[-hc,Y(Rc.tobp)],[-hc,yt],[-1.5,yt-2],[1.5,yt+2],[hc,yt],[hc,Y(Rc.tobp)]],false);
+    D.line(L.grade,-hw-30,Y(Rc.grade),hw+30,Y(Rc.grade)); D.line(L.cl,0,Y(Rc.bof)-8,0,yt+10);
+    T(L.txt,hc+0.06*k,Y(Rc.tobp+stub*0.6),0.08*k,'HSS '+(Rc.hss*12).toFixed(0)+'x'+(Rc.hss*12).toFixed(0));
+    const xr=hw+0.35*k; let yp=null;
+    [[Rc.tobp,'TOP OF BASE PLATE '+Rc.tobp.toFixed(2)],[Rc.bobp,'BOBP '+Rc.bobp.toFixed(2)],[Rc.topPed,'TOP OF PEDESTAL '+Rc.topPed.toFixed(2)],[Rc.grade,'GRADE '+Rc.grade.toFixed(2)],[Rc.tof,'TOF '+Rc.tof.toFixed(2)],[Rc.bof,'BOF '+Rc.bof.toFixed(2)]]
+      .forEach(([z,s])=>{ let y=Y(z); if(yp!=null&&yp-y<0.14*k) y=yp-0.14*k; yp=y; const xs=z>=Rc.topPed-1e-6?hb:z>=Rc.grade-1e-6?hp:hw; D.line(L.el,xs+2,Y(z),xr-0.04*k,y+0.03*k); T(L.el,xr,y,0.085*k,s); });
+    const xa=-hw-0.4*k, xb2=-hw-0.8*k, xc=-hw-1.2*k;
+    D.dimV(L.dim,Y(Rc.grade),Y(Rc.topPed),xa,-hp);
+    T(L.txt,-hw,Y(Rc.tobp+stub)+0.05*k,0.075*k,(shFI(Rc.reveal*12)+' REVEAL; '+shFI(Rc.grout*12)+' GROUT; '+shFI(Rc.bp*12)+' BASE PLATE').toUpperCase(),2);
+    D.dimV(L.dim,Y(Rc.tof),Y(Rc.grade),xa,-hp);
+    D.dimV(L.dim,Y(Rc.bof),Y(Rc.tof),xa,-hw);
+    D.dimV(L.dim,Y(Rc.tof),Y(Rc.topPed),xb2,-hp,'<> PEDESTAL');
+    D.dimV(L.dim,Y(Rc.bof),Y(Rc.grade),xc,-hw,'<> (MIN. '+shFI(Rc.frost*12)+')');
+    const yb1=Y(Rc.bof)-0.35*k, yb2=Y(Rc.bof)-0.7*k;
+    D.dimH(L.dim,-hw,-hp,yb1,Y(Rc.bof)); D.dimH(L.dim,-hp,hp,yb1,Y(Rc.bof)); D.dimH(L.dim,hp,hw,yb1,Y(Rc.bof)); D.dimH(L.dim,-hw,hw,yb2,null,'<> FOOTING');
+    viewTitle(0,yb2-0.45*k,k,'ELEVATION','LOOKING ALONG THE TRACK');
+    // plan, to the right at the same scale
+    const px=hw*2+3.2*k, py=Y((Rc.tof+Rc.bof)/2), fl=Rc.fL/2*12, fw=Rc.fW/2*12;
+    D.rect(L.ftg,px-fl,py-fw,px+fl,py+fw); D.rect(L.conc,px-hp,py-hp,px+hp,py+hp); D.rect(L.stl,px-hb,py-hb,px+hb,py+hb); D.rect(L.stl,px-hc,py-hc,px+hc,py+hc);
+    D.line(L.cl,px-fl-10,py,px+fl+10,py); D.line(L.cl,px,py-fw-10,px,py+fw+10);
+    const pb1=py-fw-0.35*k, pb2=py-fw-0.7*k;
+    D.dimH(L.dim,px-fl,px-hp,pb1,py-fw); D.dimH(L.dim,px-hp,px+hp,pb1,py-fw); D.dimH(L.dim,px+hp,px+fl,pb1,py-fw); D.dimH(L.dim,px-fl,px+fl,pb2,null,'<> ALONG TRACK');
+    const pr1=px+fl+0.35*k, pr2=px+fl+0.7*k;
+    D.dimV(L.dim,py-fw,py-hp,pr1,px+fl); D.dimV(L.dim,py-hp,py+hp,pr1,px+fl); D.dimV(L.dim,py+hp,py+fw,pr1,px+fl); D.dimV(L.dim,py-fw,py+fw,pr2,null);
+    T(L.txt,px,py+fw+0.15*k,0.08*k,'UP-STATION >',1);
+    viewTitle(px,pb2-0.45*k,k,'PLAN','');
+    T(L.txt,(px-hw)/2,Y(Rc.tobp+stub)+0.6*k,0.15*k,(Rc.cf.name+' - COLUMN FOUNDATION').toUpperCase(),1);
+    T(L.txt,(px-hw)/2,Y(Rc.tobp+stub)+0.4*k,0.09*k,(formatStation(Rc.sta)+', '+shFI(Rc.off*12)+' BEHIND BACK OF PLATFORM; GRADE '+Rc.grade.toFixed(2)).toUpperCase(),1);
+  }
+
+  /* ---------- plan of a ramp or stair, laid along the track (inches) ---------- */
+  function planView(R,k){
+    const C=ENG.C, a=ENG.align.at(R.sta), RT=rotator(a.brg-Math.PI/2), P2=p=>{ const q=RT(p); return [q.x*12,q.y*12]; };
+    const all=[]; R.foot.forEach(f=>f.p.forEach(p=>all.push(P2(p)))); (R.walls||[]).forEach(w=>w.pts.forEach(p=>all.push(P2(p))));
+    const xsAll=all.map(p=>p[0]); let xmin=Math.min(...xsAll), xmax=Math.max(...xsAll);
+    // platform edges over the stations around the ramp
+    // platform shown just past the ends of the ramp or stair
+    const xt=P2(ENG.platPt(R.sta,C.W,0))[0];
+    const sA=Math.min(C.sta0,C.sta1), sB=Math.max(C.sta0,C.sta1), lo=Math.max(sA,R.sta+(xmin-xt)/12-6), hi=Math.min(sB,R.sta+(xmax-xt)/12+6);
+    const st=[]; for(let i=0;i<=24;i++) st.push(lo+(hi-lo)*i/24);
+    if(hi>lo){ D.pline(L.plat,st.map(s=>P2(ENG.platPt(s,0,0))),false); D.pline(L.plat,st.map(s=>P2(ENG.platPt(s,C.W,0))),false);
+      const e0=P2(ENG.platPt(lo,0,0)), b0=P2(ENG.platPt(lo,C.W,0));
+      T(L.plat,e0[0]+0.1*k,e0[1]+(b0[1]>e0[1]?-0.16:0.08)*k,0.08*k,'EDGE OF PLATFORM'); T(L.plat,b0[0]+0.1*k,b0[1]+(b0[1]>e0[1]?0.08:-0.16)*k,0.08*k,'BACK OF PLATFORM');
+      ENG.bents().forEach(b=>{ if(b.sta<lo-1||b.sta>hi+1) return; const p1=P2(ENG.platPt(b.sta,-2,0)), p2=P2(ENG.platPt(b.sta,C.W+2,0));
+        D.line(L.grid,p1[0],p1[1],p2[0],p2[1]); T(L.grid,p1[0],p1[1]+(p1[1]<p2[1]?-0.16:0.06)*k,0.09*k,b.name,1); }); }
+    // footprints, with spot elevations and the walking direction
+    R.foot.forEach(f=>{ if(f.kind==='turnmark'||f.z1==null) return; const q=f.p.map(P2); D.pline(L.conc,q,true);
+      const c=[(q[0][0]+q[2][0])/2,(q[0][1]+q[2][1])/2];
+      if(f.kind==='land') T(L.el,c[0],c[1]-0.05*k,0.09*k,'EL '+f.z1.toFixed(2),1);
+      else if(f.kind==='run'){ const g=R.segs.find(s=>s.i===f.seg), sl=g&&g.L>0?(f.z1-f.z2)/g.L:0;
+        const ang=Math.atan2(q[1][1]-q[0][1],q[1][0]-q[0][0])*180/Math.PI, an=(ang>90.01||ang<-89.99)?ang+180:ang;
+        const len=Math.hypot(q[1][0]-q[0][0],q[1][1]-q[0][1]); const ux=(q[1][0]-q[0][0])/len, uy=(q[1][1]-q[0][1])/len, nx=-uy, ny=ux, o=-(R.W*12/2-0.2*k);
+        // the run's length dimension sits near one side; its slope and elevations on the other
+        const up=(ny*o<0)?1:-1;
+        T(L.txt,c[0],c[1]+(up>0?0.14:0.04)*k,0.085*k,(sl*100).toFixed(2)+'% (1:'+(1/sl).toFixed(2)+') DN '+(ang>90.01||ang<-89.99?'<':'>'),1,an);
+        T(L.el,c[0],c[1]+(up>0?0.0:-0.16)*k,0.075*k,f.z1.toFixed(2)+' TO '+f.z2.toFixed(2),1,an);
+        D.dim(L.dim,[q[0][0]+(q[3][0]-q[0][0])/2,q[0][1]+(q[3][1]-q[0][1])/2],[q[1][0]+(q[2][0]-q[1][0])/2,q[1][1]+(q[2][1]-q[1][1])/2],[c[0]+nx*o,c[1]+ny*o],ang); }
+      else if(f.kind==='stair'){ const g=R.segs.find(s=>s.i===f.seg); if(g){ for(let t=1;t<g.treadsN;t++){ const u=t*g.td/(Math.hypot(f.p[1].x-f.p[0].x,f.p[1].y-f.p[0].y)||1); if(u>=1) break;
+          const A=P2({x:f.p[0].x+(f.p[1].x-f.p[0].x)*u,y:f.p[0].y+(f.p[1].y-f.p[0].y)*u}), B=P2({x:f.p[3].x+(f.p[2].x-f.p[3].x)*u,y:f.p[3].y+(f.p[2].y-f.p[3].y)*u}); D.line(L.conc,A[0],A[1],B[0],B[1]); }
+          T(L.txt,c[0],c[1],0.085*k,g.n+' RISERS @ '+shFI(g.riser*12)+' DN',1); } } });
+    // walls: stem outline, footing dashed, name
+    const Wd=R.WALL, toe=Math.max(0,(Wd.fw-Wd.t)/2);
+    (R.walls||[]).forEach(wl=>{ const A=wl.pts[0], B=wl.pts[wl.pts.length-1]; let ux=B.x-A.x, uy=B.y-A.y; const m=Math.hypot(ux,uy); if(m<1e-6) return; ux/=m; uy/=m;
+      const box=(h,e)=>[[A.x-ux*e-uy*h,A.y-uy*e+ux*h],[B.x+ux*e-uy*h,B.y+uy*e+ux*h],[B.x+ux*e+uy*h,B.y+uy*e-ux*h],[A.x-ux*e+uy*h,A.y-uy*e-ux*h]].map(p=>P2({x:p[0],y:p[1]}));
+      D.pline(L.conc,box(Wd.t/2,0),true); D.pline(L.ftg,box(Wd.fw/2,toe),true);
+      const c=P2({x:(A.x+B.x)/2,y:(A.y+B.y)/2}), ang=Math.atan2(c[1]-P2(A)[1],c[0]-P2(A)[0])*180/Math.PI, an=(ang>90.01||ang<-89.99)?ang+180:ang;
+      T(L.txt,c[0],c[1]-0.045*k,0.09*k,wl.name,1,an); });
+    // pads and their columns
+    (R.pads||[]).filter(pd=>pd.ok).forEach((pd,pk)=>{ let ux=pd.pb.x-pd.pa.x, uy=pd.pb.y-pd.pa.y; const m=Math.hypot(ux,uy)||1; ux/=m; uy/=m; const h=Wd.t/2;
+      D.pline(L.el,[[pd.pa.x-uy*h,pd.pa.y+ux*h],[pd.pb.x-uy*h,pd.pb.y+ux*h],[pd.pb.x+uy*h,pd.pb.y-ux*h],[pd.pa.x+uy*h,pd.pa.y-ux*h]].map(p=>P2({x:p[0],y:p[1]})),true);
+      if(pd.col){ const hc=pd.csz/2, c=P2({x:pd.x,y:pd.y}); D.rect(L.stl,c[0]-hc*12,c[1]-hc*12,c[0]+hc*12,c[1]+hc*12);
+        const lf=pk%2===0; T(L.el,c[0]+(lf?-0.12:0.12)*k,c[1]+0.1*k,0.075*k,pd.name+' PAD '+pd.top.toFixed(2)+', BOBP '+pd.bobp.toFixed(2),lf?2:0); } });
+    // columns on spread footings nearby
+    CFOOT.forEach(cf=>{ const Rc=computeCF(cf); if(!Rc.ok) return; const c=P2(Rc.P); if(c[0]<xmin-8*12||c[0]>xmax+8*12) return;
+      const sq=(ha,hn)=>[[-1,-1],[1,-1],[1,1],[-1,1]].map(([i,j])=>P2({x:Rc.P.x+Rc.ua.x*ha*i+Rc.un.x*hn*j,y:Rc.P.y+Rc.ua.y*ha*i+Rc.un.y*hn*j}));
+      D.pline(L.ftg,sq(Rc.fL/2,Rc.fW/2),true); D.pline(L.conc,sq(Rc.ped/2,Rc.ped/2),true); D.pline(L.stl,sq(Rc.hss/2,Rc.hss/2),true);
+      T(L.el,c[0],c[1]+(Rc.fW/2*12)+0.1*k,0.075*k,cf.name+': TOP PED '+Rc.topPed.toFixed(2)+', BOBP '+Rc.bobp.toFixed(2)+', BOF '+Rc.bof.toFixed(2),1); });
+    // overall dimensions, tie-in and north
+    const b=D.bbox(0); const allx=all.map(p=>p[0]), ally=all.map(p=>p[1]);
+    const x0=Math.min(...allx)-toe*12, x1=Math.max(...allx)+toe*12, y0=Math.min(...ally)-toe*12, y1=Math.max(...ally)+toe*12;
+    // dimension chains: every wall face and the platform back edge across, every wall face and run end along
+    const fx=[], fy=[];
+    (R.walls||[]).forEach(wl=>{ const A=P2(wl.pts[0]), B=P2(wl.pts[wl.pts.length-1]), h=Wd.t*6;
+      if(Math.abs(A[1]-B[1])<0.5){ fy.push(A[1]-h,A[1]+h); fx.push(Math.min(A[0],B[0]),Math.max(A[0],B[0])); }
+      else if(Math.abs(A[0]-B[0])<0.5){ fx.push(A[0]-h,A[0]+h); } });
+    R.foot.forEach(f=>{ if(f.kind==='run'||f.kind==='stair'){ const q=f.p.map(P2); fx.push((q[0][0]+q[3][0])/2,(q[1][0]+q[2][0])/2); } });
+    const bk=P2(ENG.platPt(R.sta,C.W,0))[1]; fy.push(bk);
+    const uq=a=>{ const o=[]; a.slice().sort((p,q)=>p-q).forEach(v=>{ if(!o.length||v-o[o.length-1]>0.4) o.push(v); }); return o; };
+    const FX=uq(fx), FY=uq(fy);
+    if(FX.length>1) D.chainH(L.dim,FX,y1+0.4*k,y1);
+    if(FY.length>1) D.chainV(L.dim,FY,x1+0.4*k,x1);
+    D.dimH(L.dim,x0,x1,y1+0.8*k,y1,'<> OVERALL'); D.dimV(L.dim,Math.min(y0,bk),Math.max(y1,bk),x1+0.8*k,x1,'<> OVERALL');
+    const t0=P2(R.pts[0]), eS=P2(ENG.platPt(R.sta,0,0)), toPlat=eS[1]<t0[1]?-1:1; T(L.txt,t0[0],t0[1]+toPlat*0.5*k,0.09*k,'CL '+(R.isStair?'STAIR':'RAMP')+' '+formatStation(R.sta)+' (TOP EL '+R.z0.toFixed(2)+')',1);
+    const nx=x1+1.7*k, ny=y1+0.2*k, th=a.brg-Math.PI/2, dn=[-Math.sin(th),Math.cos(th)];
+    D.line(L.txt,nx,ny,nx+dn[0]*0.5*k,ny+dn[1]*0.5*k); T(L.txt,nx+dn[0]*0.62*k,ny+dn[1]*0.62*k,0.12*k,'N',1);
+    viewTitle((x0+x1)/2,y0-0.7*k,k,(R.ch.name+' - PLAN').toUpperCase(),('top '+R.z0.toFixed(2)+(R.bottom?', bottom '+R.bottom.z.toFixed(2):'')+'; low grade '+(R.low!=null?R.low.toFixed(2):'-')+'; bottom of footing '+(R.WALL.bofFix!=null?R.WALL.bofFix.toFixed(2):'follows grade')).toUpperCase());
+  }
+
+  /* ---------- build the set ---------- */
+  const RS=CHAINS.map(ch=>{ try{ return computeChain(ch); }catch(e){ return null; } }).filter(Boolean);
+  RS.forEach((R,ri)=>sheet('plan'+ri,(R.ch.name+' plan').toUpperCase(),k=>planView(R,k)));
+  // walls two to a sheet when the pair still fits at 1/4" = 1'-0" or larger, otherwise one to a sheet
+  RS.forEach((R,ri)=>{ const W=R.walls||[]; let i=0;
+    while(i<W.length){ let pair=W.slice(i,i+2);
+      if(pair.length===2 && fitK(k=>stack(pair.map(w=>kk=>wallView(R,w,kk)),k,0.7))>48) pair=[W[i]];
+      sheet('walls'+ri+'_'+i,(R.ch.name+' wall elevation'+(pair.length>1?'s ':' ')+pair.map(w=>w.name).join(', ')).toUpperCase(),k=>stack(pair.map(w=>kk=>wallView(R,w,kk)),k,0.7));
+      i+=pair.length; } });
+  const CFs=CFOOT.map(cf=>computeCF(cf)).filter(r=>r.ok);
+  for(let i=0;i<CFs.length;i+=2){ const pair=CFs.slice(i,i+2);
+    sheet('cf'+i,('column foundations '+pair.map(r=>r.cf.name).join(', ')).toUpperCase(),k=>stack(pair.map(r=>kk=>cfView(r,kk)),k,0.8)); }
+  // schedules and notes, in paper inches
+  sheet('sched','WALL AND COLUMN SCHEDULES, NOTES',k=>{
+    const table=(x,y,title,cols,rows)=>{ const rh=0.2, th=0.075; T(L.txt,x,y+0.1,0.12,title);
+      const all=[cols.map(c=>c[0]),...rows], Wt=cols.reduce((a,c)=>a+c[1],0);
+      all.forEach((r,j)=>{ let xx=x; const yy=y-j*rh; r.forEach((c,ci)=>{ const w=cols[ci][1], mx=Math.floor((w-0.08)/(th*0.9)); T(L.txt,xx+0.04,yy-rh+0.065,th,String(c==null?'':c).toUpperCase().slice(0,mx)); xx+=w; }); D.line(L.tb,x,yy-rh,x+Wt,yy-rh); });
+      D.rect(L.tb,x,y-all.length*rh,x+Wt,y); let xx=x; cols.forEach((c,ci)=>{ xx+=c[1]; if(ci<cols.length-1) D.line(L.tb,xx,y,xx,y-all.length*rh); });
+      return y-all.length*rh; };
+    const f2=v=>v==null||!isFinite(v)?'-':v.toFixed(2);
+    const wrows=[]; RS.forEach(R=>(R.walls||[]).forEach(wl=>{ const T2=wl.pts.map(q=>q.top), B2=wl.pts.map(q=>q.ftgBot).filter(v=>v!=null), H2=wl.pts.map(q=>q.height).filter(v=>v!=null);
+      wrows.push([R.ch.name,wl.name,wl.desc,shFI(wl.len*12),f2(Math.max(...T2)),f2(Math.min(...T2)),B2.length?f2(Math.max(...B2)):'-',B2.length?f2(Math.min(...B2)):'-',H2.length?shFI(Math.max(...H2)*12):'-']); }));
+    let y=table(0,0,'WALL SCHEDULE',[['RAMP / STAIR',1.0],['WALL',0.45],['LOCATION',4.2],['LENGTH',0.85],['TOW HIGH',0.8],['TOW LOW',0.8],['BOF HIGH',0.8],['BOF LOW',0.8],['MAX HEIGHT',0.95]],wrows);
+    const crows=[]; RS.forEach(R=>(R.pads||[]).filter(p=>p.ok&&p.col).forEach(p=>crows.push([p.name,'PAD ON '+R.ch.name+' '+p.wall,formatStation(p.sta),shFI(p.off*12),f2(p.top),(p.grout*12).toFixed(0)+'"',f2(p.bobp),(p.bplate*12).toFixed(0)+'"',f2(p.tobp),'-'])));
+    CFs.forEach(r=>crows.push([r.cf.name,'PEDESTAL ON SPREAD FOOTING',formatStation(r.sta),shFI(r.off*12),f2(r.topPed),(r.grout*12).toFixed(0)+'"',f2(r.bobp),(r.bp*12).toFixed(0)+'"',f2(r.tobp),f2(r.bof)]));
+    y=table(0,y-0.45,'COLUMN SCHEDULE (HSS COLUMNS)',[['COLUMN',0.9],['SUPPORT',2.6],['STATION',1.05],['BEHIND BACK',0.95],['TOP OF CONC.',0.95],['GROUT',0.6],['BOBP',0.8],['PLATE',0.6],['TOP OF PL.',0.85],['BOF',0.75]],crows);
+    const R0=RS.find(R=>!R.isStair)||RS[0], W0=R0?R0.WALL:{t:14/12,fw:3,ft:1.5,frost:3.5,curb:8/12};
+    const notes=['ELEVATIONS ARE IN FEET. TOP OF PLATFORM FROM THE TOP-OF-RAIL PROFILE (PLATFORM GEOMETRY ENGINE); RAMP AND STAIR TOPS ARE READ FROM THE PLATFORM AT THE TIE-IN.',
+      'RAMP WALLS '+shFI(W0.t*12)+' THICK; TOP OF WALL '+Math.round(W0.curb*12)+'" ABOVE THE ADJACENT WALKING SURFACE EXCEPT AT COLUMN PADS, WHICH ARE LEVEL.',
+      'WALL FOOTINGS '+shFI(W0.fw*12)+' WIDE x '+shFI(W0.ft*12)+' THICK, CENTERED ON THE WALL, RUNNING '+shFI((W0.fw-W0.t)/2*12)+' PAST EACH END OF THE WALL.',
+      'BOTTOM OF FOOTING AT LEAST '+shFI(W0.frost*12)+' BELOW THE LOW GRADE (FROST). LOW GRADE AS ENTERED, ELSE THE LOWEST GRADE ENTERED AT THE ADJACENT PIERS.',
+      'GRADE UNDER RAMP WALLS IS TAKEN AS A STRAIGHT LINE FROM THE TOP OF THE RAMP TO THE BOTTOM ALONG THE WALKING PATH. VERIFY AGAINST THE GRADING PLAN.',
+      'STAIR SUPPORT WALL TOP = TOP OF PLATFORM LESS THE FRP / BEARING STACK AT THE COLUMN.',
+      'COLUMNS HSS 8x8 ON A BASE PLATE AND GROUT PAD AS SCHEDULED; BOBP = TOP OF CONCRETE + GROUT.',
+      'COLUMN FOUNDATIONS: TOP OF PEDESTAL = GRADE + REVEAL; BOTTOM OF FOOTING = GRADE - FROST DEPTH UNLESS NOTED.',
+      'GENERATED BY THE PLATFORM GEOMETRY ENGINE FROM THE MODEL AS ENTERED; CHECK AGAINST THE CONTRACT DRAWINGS.'];
+    y-=0.5; T(L.txt,0,y,0.12,'GENERAL NOTES'); y-=0.22;
+    notes.forEach((s,j)=>{ const words=s.split(/\s+/); let line=(j+1)+'. ', out=[]; words.forEach(w=>{ if((line+w).length>150){ out.push(line); line='    '+w+' '; } else line+=w+' '; }); out.push(line);
+      out.forEach(l=>{ T(L.txt,0,y,0.085,l.trimEnd()); y-=0.15; }); y-=0.04; });
+  },1);
+  S.forEach((s,j)=>{ s.sheetEnt.s=SharedDxf.str((j+1)+' OF '+S.length); });
+  return {D,S};
+}
+
+function renderSheets(){
+  const T=document.getElementById('sh_area'); if(!T||!ENG||!window.SharedDxf) return;
+  if(!document.getElementById('pane-sheets').classList.contains('active')) return;   // built only when the tab is open
+  let B; try{ B=sheetsBuild(); }catch(e){ console.error(e); T.innerHTML='<p class="bad">The sheets could not be drawn: '+esc(e&&e.message)+'</p>'; return; }
+  SHT.B=B; if(!B.S.length){ T.innerHTML='<p class="note">Nothing to draw yet: add a ramp, stair or column.</p>'; return; }
+  let want=SHT.cur; if(!want){ try{ want=localStorage.getItem(SHT.key)||''; }catch(e){ want=''; } }
+  const cur=B.S.find(s=>s.id===want)||B.S[0]; SHT.cur=cur.id;
+  const scName=k=>k===1?'NTS (paper inches)':((SHT_SCALES.find(q=>q[0]===k)||[0,'1:'+k])[1]);
+  T.innerHTML=`<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
+      <label style="margin:0;">Sheet <select id="sh_pick">${B.S.map((s,j)=>`<option value="${s.id}"${s===cur?' selected':''}>${j+1}. ${esc(s.title)}</option>`).join('')}</select></label>
+      <button class="sm" id="sh_dxf">Download DXF (${B.S.length} sheets)</button>
+      <button class="sm ghost" id="sh_p1" title="Print the sheet shown: one 11 x 17 landscape page at its plot scale">Print sheet</button>
+      <button class="sm ghost" id="sh_pall" title="Print every sheet, one 11 x 17 landscape page each">Print all (${B.S.length})</button></div>
+    <p class="note" style="margin:0 0 6px;">${esc(SharedDxf.PRINT_NOTE)}</p>
+    <div style="margin:4px 0;"><strong>${B.S.indexOf(cur)+1}. ${esc(cur.title)}</strong> &middot; scale ${esc(scName(cur.k))}${cur.over?' &middot; <span class="bad">does not fit the sheet even at the smallest scale</span>':''}</div>
+    <div id="sh_view"></div>
+    <p class="note">Wheel: zoom about the cursor &middot; drag: pan &middot; double-click: fit.</p>
+    <table class="wide" style="margin-top:8px;"><tr><th>No.</th><th class="lbl">Sheet</th><th>Scale</th></tr>${B.S.map((s,j)=>`<tr data-sh="${s.id}" style="cursor:pointer;${s===cur?'background:rgba(27,110,120,.10)':''}"><td>${j+1}</td><td class="lbl">${esc(s.title)}</td><td>${esc(scName(s.k))}</td></tr>`).join('')}</table>`;
+  SharedDxf.viewer(document.getElementById('sh_view'), SharedDxf.sheetSVG(B.D,cur), {height:'66vh'});
+  const pick=id=>{ SHT.cur=id; try{ localStorage.setItem(SHT.key,id); }catch(e){} renderSheets(); };
+  document.getElementById('sh_pick').onchange=e=>pick(e.target.value);
+  T.querySelectorAll('tr[data-sh]').forEach(tr=>tr.onclick=()=>pick(tr.dataset.sh));
+  document.getElementById('sh_dxf').onclick=()=>{ const txt=B.D.toDXF({ltscale:1}), chk=SharedDxf.validate(txt);
+    if(!chk.ok){ alert('The DXF failed its structure check:\n'+chk.errors.slice(0,8).join('\n')); return; }
+    SharedDxf.download(txt,((document.getElementById('sh_no').value||CURNAME||'platform')+'_sheets').replace(/[^\w.-]+/g,'_')+'.dxf'); };
+  const prt=list=>SharedDxf.printSheets(list.map(s=>({svg:SharedDxf.sheetSVG(B.D,s),title:s.title})),{paper:[SHT.W,SHT.H]});
+  document.getElementById('sh_p1').onclick=()=>prt([cur]);
+  document.getElementById('sh_pall').onclick=()=>prt(B.S);
+}
+
 /* ---------- 3D: click a component for its details ----------
    draw3D tags every face with the component it belongs to (pier, beam, platform, ramp or stair,
    wall, column on a wall pad, column on a spread footing); a click opens this panel with every
@@ -4377,7 +5107,7 @@ function refreshAll(){
   drawSection('svg_psec', ACTIVE_STA, false);
   drawSection('svg_osec', ACTIVE_STA, true);
   const sb=activeBent(); drawSection('svg_ssec', sb?sb.sta:ACTIVE_STA, true, sb);
-  drawLong(); drawFramePlan(); draw3D(); drawHeat(); renderChains();
+  drawLong(); drawFramePlan(); draw3D(); drawHeat(); renderChains(); renderSheets();
 
   buildOutTable(); buildSupportTables(); buildChecks(); runValidation(); renderCalcs(); notesCount();
   syncStaControls(); renderSnap();
@@ -4540,7 +5270,7 @@ function applyCantilevers(){
    SAVE / LOAD   (carried over)
    ============================================================ */
 const KEY='platgeom.autosave.v1', LIBKEY='platgeom.library.v1', DEFKEY='platgeom.default.v1';
-const FIELDS=['hm_metric','hm_nx','hm_ny','hm_ci','notes_txt','calc_dec','t_stafmt','t_curvedef','p_extmode','t_sta0','t_brg0','t_y0','t_x0','t_gauge','t_profref','p_sta0','p_sta1','p_side','p_H','p_V','p_vdatum',
+const FIELDS=['sh_proj','sh_no','sh_by','sh_date','sh_chk','sh_cdate','hm_metric','hm_nx','hm_ny','hm_ci','notes_txt','calc_dec','t_stafmt','t_curvedef','p_extmode','t_sta0','t_brg0','t_y0','t_x0','t_gauge','t_profref','p_sta0','p_sta1','p_side','p_H','p_V','p_vdatum',
   'p_xs','p_xsdir','p_W','p_tact','p_mode','p_extra','v_carL','v_truck','v_half','v_floor',
   's_panel_in','s_capmode','s_sole_in','s_elast_in','s_masanchor_in','s_masanchorsel','s_masfloor_in','s_masinc','s_masrnd','s_capd','s_capt','s_capf','s_capw','s_piertype','s_ftproj','s_ftt','s_ftbury','s_ftfill','s_pedoff','s_peddatum','s_pedw','s_pedrise','s_grout_in','s_bplate_in',
   's_grade0','s_pcw','s_pct','s_pcd','s_pcpile','s_pcbury','s_pcdatum','s_pedhmin','s_colht',

@@ -197,6 +197,19 @@ Free-standing columns (for example canopy columns on SV-2, off the piers and ram
 - Defaults follow SP-207: 1'-6" pedestal, 4'-6" × 4'-6" × 1'-6" footing, HSS 8×8 column.
 - Outputs: a table (station, offset, coordinates, grade, top of pedestal, BOBP, top of base plate, TOF, BOF, pedestal height, cover, checks), a true-scale elevation and plan of the selected foundation with full dimensions and elevations, the footing/pedestal/column in the Ramps & Stairs plan, and footing, pedestal, grout, plate and column in 3D.
 
+### Sheets and DXF
+A **Sheets** tab draws 11 × 17 sheets of the ramps, stairs, walls and column foundations, each at a standard scale inside a border and title block (project, project no., designed / checked by and dates, scale, sheet n of N):
+
+- a plan of each ramp and stair along the track: platform edges and piers, footprints with spot elevations and run slopes, walls and dashed footings, column pads and columns, nearby spread-footing columns, dimension chains of every wall face and run end, overall dimensions, the tie-in station and north;
+- the developed elevation of every wall (two to a sheet when they still fit at 1/4" = 1'-0"): top of wall at every end, break and pad, slopes, curb, intersecting walls dashed, grout / base plate / column on each pad with BOBP, vertical chains at each end with TOW, grade, TOF and BOF, and horizontal chains of every stretch, the footing toes, the wall and the footing;
+- each column foundation on a spread footing: elevation and plan, dimensioned, with every elevation;
+- the wall schedule, column schedule (top of concrete, grout, BOBP, plate, top of plate, BOF) and general notes.
+
+**Download DXF** writes one AutoCAD R12 file (model space, full size in inches, the sheets side by side; plot each at the scale in its title block). Layers S-CONC, S-CONC-FTG, S-GRADE, S-WALK, S-XWALL, S-STEEL, S-DIMS, S-TEXT, S-ELEV, S-CNTR, S-PLAT, S-GRID, S-TBLK, S-BRDR; dimensions are DIMENSION entities. **Print sheet / Print all** print each sheet on its own 11 × 17 landscape page at its plot scale. The writer, preview and printing are the All-Structural repo's `shared/dxf.js`, copied into the page.
+
+### 3D details panel
+Clicking a component in the 3D view (press and release without dragging) opens a panel inside the app with everything about it: a pier (every elevation, footing, pedestal, beam seats and its section), a beam (section and seat elevations at every support), the platform, a ramp or stair (top, bottom, low grade, segments, profile), a wall (every point, dimensioned elevation), a column on a wall pad, or a column on a spread footing (elevations and the foundation drawing). The picked component is highlighted; **Go to inputs** opens where it is edited; Esc or × closes it.
+
 ### Heat map
 With *Ramps & stairs* ticked (off by default; elevation only), ramp runs, landings and stair treads are drawn behind the platform on the same colour scale, with walls in grey and contours across the runs. The frame widens to fit them; the contour interval coarsens in whole multiples when the range gets large, and the platform high/low and stats stay platform-only. Untick it to get the full colour range back on the platform.
 
