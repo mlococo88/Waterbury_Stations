@@ -34,17 +34,20 @@ Everything is stored in decimal feet internally. Stationing, feet-inches and inc
 
 ## Tabs
 
+The input tabs come first (Track, Platform, Structure, Ramps, Stairs & Columns), then a divider, then the outputs.
+
 | Tab | What it holds |
 |---|---|
 | **Track** | Stationing format, POB, horizontal alignment, top-of-rail profile, superelevation, plan and profile views |
 | **Platform** | Platform extent and side, edge control (H and V offsets), cross slope, width, tactile strip, platform profile mode, curve setback, tolerances, typical section |
 | **Structure** | Deck panel, cap mode, bearing assembly, beam lines, pier type, cap/pier wall, spread footing, canopy pedestal, pedestal pile cap, micropiles, proposed grade, support layout and table, section through a support |
+| **Ramps, Stairs & Columns** | Inputs first: ramps and stairs tied into the platform back edge or ends, built as chains of segments (with walls and column pads), and the columns on spread footings; then the results: ramp and stair checks, wall elevations and tables, column foundations |
 | **Platform Output** | Checks, top-of-platform table at an interval, cross section at any station, validation against known points |
 | **Support Output** | Framing plan, support elevation table, beam seats, micropile layout, beam spans, longitudinal profile |
-| **Ramps & Stairs** | Ramps and stairs tied into the platform back edge or ends, built as chains of segments; plan, profile, ADA checks, and ramp walls with footings (elevation view and tables) |
 | **Heat Map** | Platform surface unrolled along the track, coloured by elevation, deviation from target height above rail, or running slope; contours and high/low points |
 | **3D** | Orbitable 3D model of the whole structure with ground |
-| **Calculations** | Full derivation of every elevation at a chosen support |
+| **Sheets** | 11 × 17 sheets (site plan, ramp plans, wall elevations, column foundations, pier details, schedules), DXF export and printing |
+| **Calculations** | Full derivation of every elevation at a chosen pier, ramp or stair (walls and column pads included), or column on a spread footing |
 | **Notes** | Free-text project notes, saved with the platform |
 
 ---
@@ -186,10 +189,10 @@ Each ramp or stair is a **chain** of segments that starts where it ties into the
 
 **Outputs** — walls in plan with footing outlines; a developed true-scale elevation of any wall, dimensioned: top of wall at every end, break and pad, slope of each sloping stretch, curb, a vertical chain at each end (exposed height, cover to footing, footing thickness, overall height) with TOW/grade/TOF/BOF elevations, a horizontal chain of every stretch (pads, sloped, level) and the overall length; walls that meet or cross it are shown end-on as a dashed outline of their stem and footing, labelled, in feet and inches to the nearest ⅛" (top of wall, walking surface or platform, grade, top and bottom of footing, height at every break); a summary table and a per-wall table with centreline coordinates. Checks flag a wall top less than the curb above grade, a footing with less than frost cover, and a footing bottom sloping more than 10%.
 
-The 3D view paints in three layers (wholly below grade, the ground and anything crossing it, wholly above grade) so buried footings always read as below the semi-transparent ground; ramp walls are split at grade for this. Ramps, stairs and walls show in the 3D view (layers *Ramps & stairs* and *Ramp & stair walls*: ramp slabs, stair treads on stringers, walls with their level pads, and footings). They are not yet in the framing plan, heat map or Calculations tab. They save with the platform (Library / Export JSON).
+The 3D view paints in three layers (wholly below grade, the ground and anything crossing it, wholly above grade) so buried footings always read as below the semi-transparent ground; ramp walls are split at grade for this. Ramps, stairs and walls show in the 3D view (layers *Ramps & stairs* and *Ramp & stair walls*: ramp slabs, stair treads on stringers, walls with their level pads, and footings). They are not yet in the framing plan. They save with the platform (Library / Export JSON).
 
 ### Columns on spread footings
-Free-standing columns (for example canopy columns on SV-2, off the piers and ramp walls) on a square pedestal and spread footing, in the Ramps & Stairs tab.
+Free-standing columns (for example canopy columns on SV-2, off the piers and ramp walls) on a square pedestal and spread footing, entered in the *Columns on spread footings* table on the Ramps, Stairs & Columns tab (below the ramp and stair inputs, above the results), by station and distance behind the platform back edge.
 
 - Placed by station and distance behind the platform back edge.
 - **Grade** as entered, or the lowest grade entered at the piers either side, or the default grade.
@@ -211,7 +214,7 @@ A **Sheets** tab draws 11 × 17 sheets of the ramps, stairs, walls and column fo
 **Download DXF** writes one AutoCAD R12 file (model space, full size in inches, the sheets side by side; plot each at the scale in its title block). Layers S-CONC, S-CONC-FTG, S-GRADE, S-WALK, S-XWALL, S-STEEL, S-DIMS, S-TEXT, S-ELEV, S-CNTR, S-PLAT, S-GRID, S-TBLK, S-BRDR; dimensions are DIMENSION entities. **Print sheet / Print all** print each sheet on its own 11 × 17 landscape page at its plot scale. The writer, preview and printing are the All-Structural repo's `shared/dxf.js`, copied into the page.
 
 ### 3D details panel
-Clicking a component in the 3D view (press and release without dragging) opens a panel inside the app with everything about it: a pier (every elevation, footing, pedestal, beam seats and its section), a beam (section and seat elevations at every support), the platform, a ramp or stair (top, bottom, low grade, segments, profile), a wall (every point, dimensioned elevation), a column on a wall pad, or a column on a spread footing (elevations and the foundation drawing). The picked component is highlighted; **Go to inputs** opens where it is edited; Esc or × closes it.
+Clicking a component in the 3D view (press and release without dragging) opens a panel inside the app with everything about it: a pier (every elevation, footing, pedestal, beam seats and its section), a beam (section and seat elevations at every support), the platform, a ramp or stair (top, bottom, low grade, segments, profile), a wall (every point, dimensioned elevation), a column on a wall pad, or a column on a spread footing (elevations and the foundation drawing). The picked component is highlighted; **Go to inputs** opens where it is edited, **Sheet** opens the sheet that details it (pier detail, ramp plan, wall elevation or column foundations; the site plan for anything else), and **Calcs** opens its derivations; Esc or × closes it.
 
 ### Heat map
 With *Ramps & stairs* ticked (off by default; elevation only), ramp runs, landings and stair treads are drawn behind the platform on the same colour scale, with walls in grey and contours across the runs. The frame widens to fit them; the contour interval coarsens in whole multiples when the range gets large, and the platform high/low and stats stay platform-only. Untick it to get the full colour range back on the platform.
@@ -225,7 +228,13 @@ The platform surface unrolled along the track (station across, distance back fro
 Support and beam lines overlay the surface; high and low points are marked and reported from a fine scan that includes both platform edges. Hover any cell for station, offset, elevation, deviation and running slope. The view is not to scale across the platform.
 
 ### Calculations tab
-Pick a support; every elevation is derived as **symbol = formula = substituted values = result**, typeset with KaTeX (CDN; plain-text fallback offline). Sections: track (profile incl. vertical curve equation, cant, rails), horizontal (radius, curve setback, edge coordinates), platform surface, every beam, cap/wall and every bearing, micropiles, pedestal, pedestal pile cap or spread footing. Copy as text and Print.
+Pick a pier, a ramp or stair, or a column on a spread footing; every elevation is derived as **symbol = formula = substituted values = result**, typeset with KaTeX (CDN; plain-text fallback offline).
+
+- **Pier:** track (profile incl. vertical curve equation, cant, rails), horizontal (radius, curve setback, edge coordinates), platform surface, every beam, cap/wall and every bearing, micropiles, pedestal, pedestal pile cap or spread footing.
+- **Ramp or stair:** top at the platform (Z₀ = Z_edge + s_x·W), each landing, run (Δz = L/r) and stair flight (riser solved to grade where left blank) down the walking path, against the plan and against grade; the grade line under the walls, low grade and its source, bottom and top of footing; top of wall at every end, break and pad (surface + curb, or the stair support wall set down from the platform) with wall height; each column pad's top, BOBP and top of base plate.
+- **Column on a spread footing:** location, grade and its source, top of pedestal, BOBP, top of base plate, bottom and top of footing, pedestal height and cover.
+
+Copy as text and Print.
 
 ---
 

@@ -30,6 +30,7 @@
     border: 1px solid var(--graphite); border-bottom: none; background: var(--vellum-edge); color: var(--ink-soft);
     cursor: pointer; border-radius: 4px 4px 0 0; position: relative; top: 2px; }
   .tabbtn[aria-selected="true"] { background: var(--vellum); color: var(--ink); font-weight: 600; border-color: var(--ink); border-bottom: 2px solid var(--vellum); top: 1px; }
+  .tabsep { width: 1px; align-self: stretch; margin: 6px 8px 0; background: var(--graphite); }
   .tabbtn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
   main { padding: 22px 24px 60px; max-width: 2200px; }
   .tabpane { display: none; } .tabpane.active { display: block; }
@@ -67,6 +68,7 @@
   button.ghost:hover { background: var(--vellum-edge); border-color: var(--ink); }
   button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
   button.sm { padding: 3px 9px; font-size: 11px; }
+  h3.sec { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink); margin: 10px 0 8px; }
   h2.sec { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: var(--ink-soft); border-bottom: 1px solid var(--graphite); padding-bottom: 5px; margin: 4px 0 14px; }
   h2.sec.mt { margin-top: 26px; }
   .svgcard { background: var(--paper); border: 1px solid var(--graphite); border-radius: 2px; margin-bottom: 18px; }
@@ -147,9 +149,10 @@
     <button class="tabbtn" role="tab" aria-selected="true"  data-tab="track">Track</button>
     <button class="tabbtn" role="tab" aria-selected="false" data-tab="plat">Platform</button>
     <button class="tabbtn" role="tab" aria-selected="false" data-tab="struct">Structure</button>
+    <button class="tabbtn" role="tab" aria-selected="false" data-tab="chains">Ramps, Stairs &amp; Columns</button>
+    <span class="tabsep" aria-hidden="true" title="inputs | outputs"></span>
     <button class="tabbtn" role="tab" aria-selected="false" data-tab="out">Platform Output</button>
     <button class="tabbtn" role="tab" aria-selected="false" data-tab="sup">Support Output</button>
-    <button class="tabbtn" role="tab" aria-selected="false" data-tab="chains">Ramps &amp; Stairs</button>
     <button class="tabbtn" role="tab" aria-selected="false" data-tab="heat">Heat Map</button>
     <button class="tabbtn" role="tab" aria-selected="false" data-tab="v3d">3D</button>
     <button class="tabbtn" role="tab" aria-selected="false" data-tab="sheets">Sheets</button>
@@ -482,7 +485,7 @@
         <legend>ground at the supports</legend>
         <label>Default proposed grade <span class="unit">(ft)</span></label>
         <input type="text" id="s_grade0" value="" placeholder="e.g. 112.50" title="Used at any support whose own grade cell is blank.">
-        <p class="note">Each support can override this in its own row below. The grade drives cap exposure and the pedestal pile cap elevations.</p>
+        <p class="note">Each support can override this in its own row below. The grade drives cap exposure, the footing or pile cap elevations, and the defaults elsewhere: a ramp or stair with a blank low grade uses the lowest grade entered at its adjacent piers, and a column on a spread footing with a blank grade uses the lowest grade entered at the two nearest piers (both fall back to this default when no pier grade is entered). Their own inputs are on the Ramps, Stairs &amp; Columns tab.</p>
       </fieldset>
 
       <h2 class="sec">Support Lines</h2>
@@ -633,21 +636,22 @@
       </div>
     </div>
   </div>
-  <h2 class="sec mt">Results</h2>
-  <div class="svgcard" style="margin-top:18px;">
+  <h2 class="sec mt">Columns on spread footings</h2>
+  <p class="note" style="margin-top:0;">Free-standing columns (canopy columns off the piers and walls) on a concrete pedestal and spread footing, located by station and distance behind the platform's back edge. Top of pedestal = grade + reveal; bottom of base plate = top of pedestal + grout; bottom of footing = grade &minus; depth below grade. A blank grade uses the lowest grade at the two nearest piers (shown greyed).</p>
+  <div id="cf_edit" class="scroll"></div>
+
+  <h2 class="sec mt" style="border-top:2px solid var(--ink); padding-top:14px;">Results</h2>
+  <h3 class="sec">Ramps and stairs</h3>
+  <div id="ch_results" class="scroll"></div>
+  <h3 class="sec mt">Walls</h3>
+  <div class="svgcard" style="margin-top:10px;">
     <div class="cap"><span>Wall elevation (developed, true scale)</span><span id="ch_wallpick" style="display:flex; gap:4px; flex-wrap:wrap;"></span>
       <span class="gctrl"><button data-sz="svg_chwall" data-a="in">+</button><button data-sz="svg_chwall" data-a="out">&minus;</button><button data-sz="svg_chwall" data-a="fit">Fit</button></span></div>
     <svg id="svg_chwall" viewBox="0 0 1500 560"></svg>
   </div>
-  <h2 class="sec mt">Walls</h2>
   <div id="ch_walls" class="scroll"></div>
-  <h2 class="sec mt">Results</h2>
-  <div id="ch_results" class="scroll"></div>
-
-  <h2 class="sec mt">Columns on spread footings</h2>
-  <p class="note" style="margin-top:0;">Free-standing columns (canopy columns off the piers and walls) on a concrete pedestal and spread footing. Top of pedestal = grade + reveal; bottom of base plate = top of pedestal + grout; bottom of footing = grade &minus; depth below grade.</p>
-  <div id="cf_edit" class="scroll"></div>
-  <div class="svgcard" style="margin-top:14px;">
+  <h3 class="sec mt">Column foundations</h3>
+  <div class="svgcard" style="margin-top:10px;">
     <div class="cap"><span>Column foundation &mdash; elevation and plan (true scale)</span><span id="cf_pick" style="display:flex; gap:4px; flex-wrap:wrap;"></span>
       <span class="gctrl"><button data-sz="svg_cfelev" data-a="in">+</button><button data-sz="svg_cfelev" data-a="out">&minus;</button><button data-sz="svg_cfelev" data-a="fit">Fit</button></span></div>
     <svg id="svg_cfelev" viewBox="0 0 1500 560"></svg>
@@ -708,10 +712,10 @@ Open: confirm 10 in casing with geotech."></textarea>
 
 <!-- ============ TAB 7: CALCULATIONS ============ -->
 <section class="tabpane" id="pane-calc" role="tabpanel">
-  <h2 class="sec">Derivations at a support</h2>
-  <p class="note" style="margin-bottom:12px;">Every elevation at the selected support, worked from the rail up and then down through the structure. Each line reads symbol = formula = substituted values = result.</p>
+  <h2 class="sec">Derivations</h2>
+  <p class="note" style="margin-bottom:12px;">Every elevation at the selected pier, ramp or stair, or spread-footing column. A pier is worked from the rail up and then down through the structure; a ramp or stair from the platform down its walking path, then its grade, footings, walls and column pads; a column from the grade at it. Each line reads symbol = formula = substituted values = result.</p>
   <fieldset>
-    <legend>support &amp; formatting</legend>
+    <legend>what to derive &amp; formatting</legend>
     <div id="calc_pick" style="display:flex; gap:4px; flex-wrap:wrap; margin-bottom:10px;"></div>
     <div class="row4">
       <div><label>Decimals</label><input type="number" id="calc_dec" value="3" min="2" max="5"></div>
@@ -733,7 +737,7 @@ Open: confirm 10 in casing with geotech."></textarea>
     <svg id="svg_3d" viewBox="0 0 1200 620" style="cursor:grab;"></svg>
     <div id="pop3" class="pop3" hidden>
       <div class="pop3-head"><strong id="pop3_title"></strong><span id="pop3_sub" class="note"></span><span style="flex:1"></span>
-        <button class="sm ghost" id="pop3_goto" title="Open where this is edited">Go to inputs</button><button class="sm" onclick="closePop3()" title="Close (Esc)">&times;</button></div>
+        <button class="sm ghost" id="pop3_goto" title="Open where this is edited">Go to inputs</button><button class="sm ghost" id="pop3_sheet" title="Open the sheet that details this">Sheet</button><button class="sm ghost" id="pop3_calc" title="Open its derivations">Calcs</button><button class="sm" onclick="closePop3()" title="Close (Esc)">&times;</button></div>
       <div id="pop3_body" class="pop3-body"></div>
     </div>
     <div style="padding:10px 12px; border-top:1px solid var(--graphite);">
@@ -3310,9 +3314,28 @@ function openPop3(o){
   REDRAW['svg_pop']=draw||(()=>{});
   try{ if(draw) draw(); }catch(e){ console.error(e); }
   G.style.display=go?'':'none'; G.onclick=go||null;
+  const GS=document.getElementById('pop3_sheet'), GC=document.getElementById('pop3_calc');
+  if(GS) GS.onclick=()=>{ const id=sheetIdFor(o); closePop3(); if(id){ SHT.cur=id; try{ localStorage.setItem(SHT.key,id); }catch(e){} } document.querySelector('.tabbtn[data-tab="sheets"]')?.click(); try{ renderSheets(); }catch(e){} };
+  const cs = o.t==='bent' ? ()=>{ CALC_T='bent'; CALC_BENT=Math.max(0,ENG.bents().findIndex(x=>x.name===o.b.name)); }
+           : (o.t==='chain'||o.t==='wall'||o.t==='pad') ? ()=>{ CALC_T='chain'; CALC_I=o.ci; }
+           : o.t==='cf' ? ()=>{ CALC_T='cf'; CALC_I=o.i; } : null;
+  if(GC){ GC.style.display=cs?'':'none'; GC.onclick=cs?()=>{ cs(); closePop3(); document.querySelector('.tabbtn[data-tab="calc"]')?.click(); renderCalcs(); }:null; }
   el.hidden=false; draw3D();
 }
 
+/* The sheet that details a 3D pick: the pier's detail sheet, the ramp plan, the wall's
+   elevation, the column foundations; anything else opens the site plan. */
+function sheetIdFor(o){
+  let B; try{ B=sheetsBuild(); }catch(e){ return null; }
+  const ids=B.S, words=t=>t.replace(/^.*?(DETAILS|ELEVATIONS?|FOUNDATIONS)\s+/,'').split(/,\s*/);
+  const find=(pre,name)=>{ const sh=ids.find(x=>x.id.startsWith(pre)&&(name==null||words(x.title).includes(String(name).toUpperCase()))); return sh?sh.id:null; };
+  if(o.t==='bent') return find('pier',o.b.name)||'site';
+  if(o.t==='chain') return find('plan'+o.ci)||'site';
+  if(o.t==='wall'||o.t==='pad'){ const R=computeChain(CHAINS[o.ci]); const wn=o.t==='wall'?(R.walls[o.wi]||{}).name:((R.pads||[]).find(x=>x.name===o.pn)||{}).wall;
+    return find('walls'+o.ci+'_',wn)||find('plan'+o.ci)||'site'; }
+  if(o.t==='cf') return find('cf',(CFOOT[o.i]||{}).name)||'site';
+  return 'site';
+}
 let CHAIN_SEL=0;
 const CHAIN_LIM={ rampMax:12, riseMax:2.5, landMin:5, widthMin:3, riserMax:7/12, riserMin:4/12, treadMin:11/12 };
 
@@ -4895,7 +4918,7 @@ function toCSV(head,rows,name){
    Every elevation at a support, written as
    symbol = formula = substituted values = result.
    ============================================================ */
-let CALC_BENT=0;
+let CALC_BENT=0, CALC_T='bent', CALC_I=0;   // what the Calculations tab works through: a pier, a ramp / stair, or a column on a spread footing
 
 // KaTeX is loaded from a CDN. Offline it simply will not be there, so every row
 // also carries a plain-text form and the page falls back to it.
@@ -4948,6 +4971,8 @@ function profDeriv(prof, s, sym, dec){
 
 function buildCalcs(){
   if(!ENG) return [];
+  if(CALC_T==='chain') return buildCalcsChain();
+  if(CALC_T==='cf') return buildCalcsCF();
   const B=ENG.bents(); if(!B.length) return [];
   const b=B[Math.min(CALC_BENT,B.length-1)], s=b.sta, C=ENG.C;
   const dec=Math.max(2,Math.min(5,gn('calc_dec')||3));
@@ -5149,13 +5174,123 @@ function buildCalcs(){
   return secs;
 }
 
+function calcKit(){
+  const dec=Math.max(2,Math.min(5,gn('calc_dec')||3));
+  const n=(v,d)=>(typeof v==='number'&&isFinite(v))?v.toFixed(d==null?dec:d):'\u2014';
+  const secs=[];
+  const S=(title)=>{ const sec={title,rows:[]}; secs.push(sec); return sec; };
+  const add=(sec,name,parts,note,unit)=>{
+    const u=unit===undefined?'ft':unit, tail=u?`\\;\\text{${u}}`:'';
+    const p=parts.slice(); if(!/[{}]/.test(p[p.length-1])) p[p.length-1]=`\\mathbf{${p[p.length-1]}}`;   // a symbolic result stays plain
+    sec.rows.push({name, tex:p.join(' = ')+tail, plain:deTex(p.join(' = '))+(u?' '+u:''), note}); };
+  const sub=(sec,label)=>sec.rows.push({subhead:label});
+  return {dec,n,secs,S,add,sub};
+}
+/* Ramps and stairs: the top read from the platform, each segment stepped down, the
+   low grade and footing, every wall end and break, and the column pads. */
+function buildCalcsChain(){
+  if(!CHAINS.length) return [];
+  const ch=CHAINS[Math.min(CALC_I,CHAINS.length-1)]; let R; try{ R=computeChain(ch); }catch(e){ return []; }
+  const C=ENG.C, {n,secs,S,add,sub}=calcKit(), s=R.sta, slp=(C.xsDir==='away'?-1:1)*C.xs/100;
+  const t1=S('1 \u00b7 '+(ch.name||'Ramp / stair')+' \u00b7 top at the platform');
+  add(t1,'Tie-in station',['S', formatStation(s)], R.anchor==='back'?'off the back edge of the platform':(R.anchor==='beg'?'off the begin end of the platform':'off the end of the platform'),'');
+  const ze=ENG.edgeElev(s);
+  if(R.anchor==='back') add(t1,'Top of platform at the back edge',['Z_{0}','Z_{edge} + s_{x}W',`${n(ze)} + (${n(slp,5)})(${n(C.W,4)})`, n(R.z0)],'the top landing starts at the platform surface; the edge elevation is worked in the pier derivations');
+  else { const off=(R.z0-ze)/(slp||1e-9); add(t1,'Top of platform at the tie-in',['Z_{0}','Z_{edge} + s_{x}w',`${n(ze)} + (${n(slp,5)})(${n(off,4)})`, n(R.z0)]); }
+  add(t1,'Clear width',['W', n(R.W,4)],'between the inside faces of the walls');
+  const t2=S('2 \u00b7 Down the walking path');
+  R.segs.forEach(g=>{
+    if(g.k==='turn'){ sub(t2,g.label); return; }
+    sub(t2,`${g.label} \u00b7 ${formatStation(s)} + ${n(g.dist1,2)} ft along the path`);
+    if(g.k==='land'){ add(t2,'Length',['L', n(g.L,4)]); add(t2,'End elevation',['Z_{2}','Z_{1}', n(g.z2)],'landings are level'); }
+    else if(g.k==='run'){
+      add(t2,'Drop',['\\Delta z','L/r',`${n(g.L,4)}/${n(g.ratio,2)}`, n(g.dz,4)],`running slope 1:${n(g.ratio,2)} = ${n(g.pct,2)}%; ${(g.dz*12).toFixed(2)} in`);
+      add(t2,'End elevation',['Z_{2}','Z_{1} - \\Delta z',`${n(g.z1)} - ${n(g.dz,4)}`, n(g.z2)]); }
+    else if(g.k==='stair'){
+      if(g.solved) add(t2,'Riser',['h_{r}','(Z_{1} - Z_{g})/N',`(${n(g.z1)} - ${n(R.grade,2)})/${g.n}`, (g.riser*12).toFixed(3)],'solved so the last flight lands on grade','in');
+      else add(t2,'Riser',['h_{r}', (g.riser*12).toFixed(3)],'as entered','in');
+      add(t2,'Flight length',['L','n_{t}\\,t',`${g.treadsN}(${n(g.td,4)})`, n(g.L,4)],`${g.treadsN} treads at ${(g.td*12).toFixed(2)} in`);
+      add(t2,'End elevation',['Z_{2}','Z_{1} - N h_{r}',`${n(g.z1)} - ${g.n}(${n(g.riser,4)})`, n(g.z2)]); }
+    if(g.plan!=null) add(t2,'Against the plan',['\\delta','Z_{2} - Z_{plan}',`${n(g.z2)} - ${n(g.plan)}`, n(g.z2-g.plan,3)],'','ft');
+  });
+  if(R.grade!=null) add(t2,'Bottom against grade',['\\delta_{g}','Z_{bot} - Z_{g}',`${n(R.bottom.z)} - ${n(R.grade,2)}`, n(R.miss,3)],`${(Math.abs(R.miss)*12).toFixed(2)} in ${R.miss>=0?'above':'below'} grade`);
+  const W=R.WALL;
+  if(R.walls.length){
+    const t3=S('3 \u00b7 Grade, low grade and footings');
+    if(!R.isStair && R.gTop!=null) add(t3,'Grade under the walls',['Z_{g}(d)','Z_{g,top} + (Z_{g,bot}-Z_{g,top})\\dfrac{d}{D}',`${n(R.gTop,2)} + (${n(R.gBot,2)}-${n(R.gTop,2)})\\dfrac{d}{${n(R.bottom.dist,2)}}`],'a straight line from the top of the path to the bottom, d measured along the path','');
+    add(t3,'Low grade',['Z_{low}', n(R.low,2)], R.lowSrc||'');
+    if(W.level && W.bofFix!=null){
+      const fx=String(ch.ftgBot==null?'':ch.ftgBot).trim();
+      if(fx!=='') add(t3,'Bottom of footing',['Z_{bof}', n(W.bofFix)],'set in the inputs; one level footing');
+      else add(t3,'Bottom of footing',['Z_{bof}','Z_{low} - d_{fr}',`${n(R.low,2)} - ${n(W.frost,4)}`, n(W.bofFix)],`one level footing, ${ftin(W.frost)} below the low grade`);
+    } else add(t3,'Bottom of footing',['Z_{bof}(d)','Z_{g}(d) - d_{fr}','Z_{g}(d) - '+n(W.frost,4)],`follows grade, ${ftin(W.frost)} below it`,'');
+    add(t3,'Top of footing',(W.level&&W.bofFix!=null?['Z_{tof}','Z_{bof} + T_{f}',`${n(W.bofFix)} + ${n(W.ft,4)}`, n(W.bofFix+W.ft)]:['Z_{tof}','Z_{bof} + T_{f}','Z_{bof} + '+n(W.ft,4)]),`footing ${ftin(W.fw)} wide \u00d7 ${ftin(W.ft)} thick, centred on the wall`, W.level&&W.bofFix!=null?'ft':'');
+    const t4=S('4 \u00b7 Walls');
+    if(R.isStair && R.stairWall) add(t4,'Top of stair support wall',['Z_{tw}','Z_{0} - h_{FRP}',`${n(R.z0)} - ${n(R.stairWall.below,4)}`, n(R.stairWall.top)],'set down from the platform by the FRP and bearing stack');
+    else add(t4,'Top of wall',['Z_{tw}','Z_{s} + c',`Z_{s} + ${n(W.curb,4)}`],`curb ${(W.curb*12).toFixed(0)}" above the walking surface beside it; level over column pads`,'');
+    R.walls.forEach(wl=>{
+      sub(t4,`${wl.name} \u00b7 ${wl.desc||''} \u00b7 ${ftin(wl.len)} long, ${ftin(W.t)} thick`);
+      wl.pts.forEach(q=>{
+        const surf=q.surf!=null?q.surf:q.top-W.curb;
+        if(q.pad) add(t4,`${q.where}`,['Z_{tw}', n(q.top)],'level over the pad');
+        else if(R.isStair) add(t4,`${q.where}`,['Z_{tw}', n(q.top)]);
+        else add(t4,`${q.where}`,['Z_{tw}','Z_{s} + c',`${n(surf)} + ${n(W.curb,4)}`, n(q.top)]);
+        if(q.ftgTop!=null) add(t4,'',['h_{w}','Z_{tw} - Z_{tof}',`${n(q.top)} - ${n(q.ftgTop)}`, n(q.top-q.ftgTop,3)],
+          q.grade!=null?`grade ${n(q.grade,2)}, exposed ${ftin(q.top-q.grade)}; bottom of footing ${n(q.ftgBot)}`:'');
+      });
+    });
+  }
+  const pads=(R.pads||[]).filter(p=>p.ok);
+  if(pads.length){
+    const t5=S('5 \u00b7 Column pads and columns');
+    pads.forEach(pd=>{
+      const p=(ch.pads||[]).find(q=>(q.name||'')===pd.name)||{}, el=String(p.elev==null?'':p.elev).trim(), bl=String(p.below==null?'':p.below).trim();
+      sub(t5,`${pd.name} on ${pd.wall} \u00b7 ${formatStation(pd.sta)}, ${n(pd.off,2)} ft behind the back edge \u00b7 pad ${ftin(pd.len)} long`);
+      if(el!=='') add(t5,'Top of pad',['Z_{pad}', n(pd.top)],'set in the inputs');
+      else if(bl!=='') add(t5,'Top of pad',['Z_{pad}','Z_{back} - d',`${n(ENG.surfElev(pd.sta,C.W))} - ${n(parseFloat(bl),4)}`, n(pd.top)],'set down from the platform back edge');
+      else add(t5,'Top of pad',['Z_{pad}','\\max(Z_{tw,a},\\;Z_{tw,b})', n(pd.top)],'the higher end of the wall under the pad; the wall steps down at the low end');
+      if(pd.col){
+        add(t5,'Bottom of base plate',['Z_{bobp}','Z_{pad} + t_{g}',`${n(pd.top)} + ${n(pd.grout,4)}`, n(pd.bobp)],`grout ${(pd.grout*12).toFixed(2)} in`);
+        add(t5,'Top of base plate',['Z_{tobp}','Z_{bobp} + t_{bp}',`${n(pd.bobp)} + ${n(pd.bplate,4)}`, n(pd.tobp)],`base plate ${(pd.bplate*12).toFixed(2)} in, HSS ${(pd.csz*12).toFixed(0)}\u00d7${(pd.csz*12).toFixed(0)}`);
+      }
+    });
+  }
+  return secs;
+}
+/* A column on a spread footing: everything hangs off the grade at the column. */
+function buildCalcsCF(){
+  if(!CFOOT.length) return [];
+  const R=computeCF(CFOOT[Math.min(CALC_I,CFOOT.length-1)]), {n,secs,S,add}=calcKit();
+  const t1=S('1 \u00b7 '+(R.cf.name||'Column')+' \u00b7 location and grade');
+  add(t1,'Station',['S', formatStation(R.sta)],'','');
+  add(t1,'Behind the platform back edge',['w', n(R.off,4)]);
+  add(t1,'Coordinates',['N', n(R.P.y,3)]); add(t1,'',['E', n(R.P.x,3)]);
+  if(!R.ok){ add(t1,'Grade',['Z_{g}','\\text{needs a grade}'],'no grade entered here, at the nearest piers, or as the default',''); return secs; }
+  add(t1,'Grade',['Z_{g}', n(R.grade,2)], R.gsrc);
+  const t2=S('2 \u00b7 Pedestal and column base');
+  add(t2,'Top of pedestal',['Z_{ped}','Z_{g} + r',`${n(R.grade,2)} + ${n(R.reveal,4)}`, n(R.topPed)],`reveal ${(R.reveal*12).toFixed(0)} in above grade; pedestal ${(R.ped*12).toFixed(0)} in square`);
+  add(t2,'Bottom of base plate',['Z_{bobp}','Z_{ped} + t_{g}',`${n(R.topPed)} + ${n(R.grout,4)}`, n(R.bobp)],`grout ${(R.grout*12).toFixed(2)} in`);
+  add(t2,'Top of base plate',['Z_{tobp}','Z_{bobp} + t_{bp}',`${n(R.bobp)} + ${n(R.bp,4)}`, n(R.tobp)],`base plate ${(R.bp*12).toFixed(2)} in, HSS ${(R.hss*12).toFixed(0)}\u00d7${(R.hss*12).toFixed(0)}`);
+  const t3=S('3 \u00b7 Spread footing');
+  const bo=String(R.cf.bofOvr==null?'':R.cf.bofOvr).trim();
+  if(bo!=='') add(t3,'Bottom of footing',['Z_{bof}', n(R.bof)],'set in the inputs');
+  else add(t3,'Bottom of footing',['Z_{bof}','Z_{g} - d_{fr}',`${n(R.grade,2)} - ${n(R.frost,4)}`, n(R.bof)],`${ftin(R.frost)} minimum below grade`);
+  add(t3,'Top of footing',['Z_{tof}','Z_{bof} + T_{f}',`${n(R.bof)} + ${n(R.fT,4)}`, n(R.tof)],`footing ${ftin(R.fL)} \u00d7 ${ftin(R.fW)} \u00d7 ${ftin(R.fT)}`);
+  add(t3,'Pedestal height',['h_{ped}','Z_{ped} - Z_{tof}',`${n(R.topPed)} - ${n(R.tof)}`, n(R.pedH,3)]);
+  add(t3,'Cover over the footing',['c','Z_{g} - Z_{tof}',`${n(R.grade,2)} - ${n(R.tof)}`, n(R.cover,3)]);
+  return secs;
+}
 function renderCalcs(){
   const box=document.getElementById('calc_out'); if(!box) return;
   const pick=document.getElementById('calc_pick');
   const B=ENG?ENG.bents():[];
-  if(pick) pick.innerHTML=B.map((b,i)=>`<button class="sm ${i===Math.min(CALC_BENT,B.length-1)?'':'ghost'}" onclick="CALC_BENT=${i};renderCalcs()">${esc(b.name)}</button>`).join('');
+  const lab=t=>`<span class="note" style="align-self:center; min-width:120px;">${t}</span>`, on=(t,i)=>CALC_T===t&&CALC_I===i;
+  if(pick) pick.innerHTML=
+    `<div style="display:flex; gap:4px; flex-wrap:wrap; width:100%;">${lab('Piers')}`+B.map((b,i)=>`<button class="sm ${CALC_T==='bent'&&i===Math.min(CALC_BENT,B.length-1)?'':'ghost'}" onclick="CALC_T='bent';CALC_BENT=${i};renderCalcs()">${esc(b.name)}</button>`).join('')+`</div>`+
+    (CHAINS.length?`<div style="display:flex; gap:4px; flex-wrap:wrap; width:100%; margin-top:4px;">${lab('Ramps &amp; stairs')}`+CHAINS.map((c,i)=>`<button class="sm ${on('chain',i)?'':'ghost'}" onclick="CALC_T='chain';CALC_I=${i};renderCalcs()">${esc(c.name||('Ramp '+(i+1)))}</button>`).join('')+`</div>`:'')+
+    (CFOOT.length?`<div style="display:flex; gap:4px; flex-wrap:wrap; width:100%; margin-top:4px;">${lab('Spread-footing columns')}`+CFOOT.map((c,i)=>`<button class="sm ${on('cf',i)?'':'ghost'}" onclick="CALC_T='cf';CALC_I=${i};renderCalcs()">${esc(c.name||('C'+(i+1)))}</button>`).join('')+`</div>`:'');
   const secs=buildCalcs();
-  if(!secs.length){ box.innerHTML='<p class="note">Add a support to see its derivations.</p>'; return; }
+  if(!secs.length){ box.innerHTML='<p class="note">Nothing to derive yet: add a support, ramp, stair or column.</p>'; return; }
   let h='';
   secs.forEach(sec=>{
     h+=`<div class="calcsec"><h3>${esc(sec.title)}</h3>`;
