@@ -2664,9 +2664,53 @@ function draw3D(){
     const d=y2+dist;
     return {u:x1/d, v:z2/d, d};
   };
+  // Faces that cross grade are cut at the grade plane (the lowest and the highest grade
+  // at the supports), so the part above ground sorts against the beams, rails and deck
+  // in the top layer instead of always being painted under them.
+  { const gz0=gpts.map(q=>q.g);
+    if(gb('v3d_grnd') && gz0.length){
+      const lo=Math.min(...gz0), hi=Math.max(...gz0);
+      const clip=(P,z0,keepAbove)=>{ const out=[]; for(let i=0;i<P.length;i++){ const a=P[i], b=P[(i+1)%P.length];
+          const ia=keepAbove?a.z>=z0:a.z<=z0, ib=keepAbove?b.z>=z0:b.z<=z0;
+          if(ia) out.push(a);
+          if(ia!==ib){ const t=(z0-a.z)/(b.z-a.z); out.push({x:a.x+(b.x-a.x)*t, y:a.y+(b.y-a.y)*t, z:z0}); } }
+        return out.length>=3?out:null; };
+      const add=[];
+      for(let i=faces.length-1;i>=0;i--){ const f=faces[i]; if(f.ground||f.lay) continue;
+        const zs=f.p.map(q=>q.z), zmx=Math.max(...zs), zmn=Math.min(...zs);
+        if(!(zmx>hi+1e-3 && zmn<hi-1e-3) && !(zmn<lo-1e-3 && zmx>lo+1e-3)) continue;
+        const up=clip(f.p,hi,true), mid0=clip(f.p,hi,false), dn=mid0?clip(mid0,lo,false):null, mid=mid0?clip(mid0,lo,true):null;
+        faces.splice(i,1);
+        if(up) add.push({...f,p:up,lay:'above'}); if(dn) add.push({...f,p:dn,lay:'under'}); if(mid) add.push({...f,p:mid,lay:null}); }
+      add.forEach(f=>faces.push(f)); } }
+  // Break large faces into tiles of about 3 ft (8 ft while dragging) so the painter's sort
+  // compares neighbouring pieces: a long beam against the wall it sits on, a wall top
+  // against the beam above it. Quads tile bilinearly; other polygons fan into triangles first.
+  { const maxL=fast?8:3, out=[];
+    const lerp=(a,b,t)=>({x:a.x+(b.x-a.x)*t, y:a.y+(b.y-a.y)*t, z:a.z+(b.z-a.z)*t});
+    const len=(a,b)=>Math.hypot(b.x-a.x,b.y-a.y,b.z-a.z);
+    faces.forEach(f=>{
+      if(f.ground||f.p.length<3){ out.push(f); return; }
+      let polys=[f.p];
+      if(f.p.length>4){ const c=f.p.reduce((a,q)=>({x:a.x+q.x/f.p.length,y:a.y+q.y/f.p.length,z:a.z+q.z/f.p.length}),{x:0,y:0,z:0});
+        const big=f.p.some((q,i)=>len(q,f.p[(i+1)%f.p.length])>maxL);
+        if(!big){ out.push(f); return; }
+        polys=f.p.map((q,i)=>[c,q,f.p[(i+1)%f.p.length]]); }
+      polys.forEach(P=>{
+        if(P.length===4){ const [A,B,C2,D2]=P, nu=Math.min(24,Math.ceil(Math.max(len(A,B),len(D2,C2))/maxL)), nv=Math.min(24,Math.ceil(Math.max(len(B,C2),len(A,D2))/maxL));
+          if(nu<=1&&nv<=1){ out.push(polys.length===1?f:{...f,p:P}); return; }
+          for(let i=0;i<nu;i++) for(let j=0;j<nv;j++){
+            const q=(u,v)=>lerp(lerp(A,B,u),lerp(D2,C2,u),v);
+            out.push({...f,p:[q(i/nu,j/nv),q((i+1)/nu,j/nv),q((i+1)/nu,(j+1)/nv),q(i/nu,(j+1)/nv)]}); } }
+        else if(P.length===3){ const [A,B,C2]=P, n=Math.min(24,Math.ceil(Math.max(len(A,B),len(B,C2),len(C2,A))/maxL));
+          if(n<=1){ out.push(polys.length===1?f:{...f,p:P}); return; }
+          const q=(i,j)=>({x:A.x+(B.x-A.x)*i/n+(C2.x-A.x)*j/n, y:A.y+(B.y-A.y)*i/n+(C2.y-A.y)*j/n, z:A.z+(B.z-A.z)*i/n+(C2.z-A.z)*j/n});
+          for(let i=0;i<n;i++) for(let j=0;j<n-i;j++){ out.push({...f,p:[q(i,j),q(i+1,j),q(i,j+1)]}); if(j<n-i-1) out.push({...f,p:[q(i+1,j),q(i+1,j+1),q(i,j+1)]}); } }
+        else out.push({...f,p:P}); }); });
+    faces.length=0; out.forEach(f=>faces.push(f)); }
   faces.forEach(f=>{ f.q=f.p.map(pr);
     const av=f.q.reduce((a,b)=>a+b.d,0)/f.q.length, mn=Math.min(...f.q.map(q=>q.d));
-    f.d=0.5*av+0.5*mn; });                       // blend of centroid and nearest point
+    f.d=0.8*av+0.2*mn; });                       // mostly centroid now that faces are small
   let mnu=Infinity,mxu=-Infinity,mnv=Infinity,mxv=-Infinity;
   faces.forEach(f=>f.q.forEach(q=>{ mnu=Math.min(mnu,q.u); mxu=Math.max(mxu,q.u); mnv=Math.min(mnv,q.v); mxv=Math.max(mxv,q.v); }));
   const pad=26, k=Math.min((W-2*pad)/Math.max(mxu-mnu,1e-9),(H-2*pad)/Math.max(mxv-mnv,1e-9))*CAM.zoom;
