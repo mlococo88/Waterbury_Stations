@@ -2752,7 +2752,7 @@ function bind3D(){
    the column foundations on spread footings, then the wall and column schedules and notes.
    ============================================================ */
 const SHT={W:17,H:11,m:0.375,tbH:0.9,cur:null,B:null,key:'pge_sheet_v1'};
-const SHT_SCALES=[[4,'3" = 1\'-0"'],[6,'2" = 1\'-0"'],[8,'1 1/2" = 1\'-0"'],[12,'1" = 1\'-0"'],[16,'3/4" = 1\'-0"'],[24,'1/2" = 1\'-0"'],[32,'3/8" = 1\'-0"'],[48,'1/4" = 1\'-0"'],[64,'3/16" = 1\'-0"'],[96,'1/8" = 1\'-0"'],[192,'1/16" = 1\'-0"']];
+const SHT_SCALES=[[4,'3" = 1\'-0"'],[6,'2" = 1\'-0"'],[8,'1 1/2" = 1\'-0"'],[12,'1" = 1\'-0"'],[16,'3/4" = 1\'-0"'],[24,'1/2" = 1\'-0"'],[32,'3/8" = 1\'-0"'],[48,'1/4" = 1\'-0"'],[64,'3/16" = 1\'-0"'],[96,'1/8" = 1\'-0"'],[192,'1/16" = 1\'-0"'],[240,'1" = 20\'-0"'],[360,'1" = 30\'-0"'],[480,'1" = 40\'-0"'],[600,'1" = 50\'-0"']];
 const shFI=inch=>SharedDxf.fmtFtIn(inch);
 
 function sheetsBuild(){
@@ -2983,8 +2983,140 @@ function sheetsBuild(){
     viewTitle((x0+x1)/2,y0-0.7*k,k,(R.ch.name+' - PLAN').toUpperCase(),('top '+R.z0.toFixed(2)+(R.bottom?', bottom '+R.bottom.z.toFixed(2):'')+'; low grade '+(R.low!=null?R.low.toFixed(2):'-')+'; bottom of footing '+(R.WALL.bofFix!=null?R.WALL.bofFix.toFixed(2):'follows grade')).toUpperCase());
   }
 
+  /* ---------- a table in paper inches times k, top-left at (x, y); returns its bottom ---------- */
+  const tableK=(x,y,k,title,cols,rows,th)=>{ th=th||0.075; const rh=(th+0.105)*k; if(title) T(L.txt,x,y+0.08*k,0.1*k,title);
+    const all=cols?[cols.map(c=>c[0]),...rows]:rows, ws=(cols||rows[0].map((_,i)=>[0,i?1.3:2.4])).map(c=>c[1]*k), Wt=ws.reduce((a,b)=>a+b,0);
+    all.forEach((r,j)=>{ let xx=x; const yy=y-j*rh; r.forEach((c,ci)=>{ const mx=Math.floor((ws[ci]/k-0.06)/(th*0.9)); const num=ci>0&&/^[-\d.]/.test(String(c));
+      T(L.txt,num?xx+ws[ci]-0.04*k:xx+0.04*k,yy-rh+0.055*k,th*k,String(c==null?'':c).toUpperCase().slice(0,mx),num?2:0); xx+=ws[ci]; }); D.line(L.tb,x,yy-rh,x+Wt,yy-rh); });
+    D.rect(L.tb,x,y-all.length*rh,x+Wt,y); let xx=x; ws.forEach((w,ci)=>{ xx+=w; if(ci<ws.length-1) D.line(L.tb,xx,y,xx,y-all.length*rh); });
+    if(cols) D.line(L.tb,x,y-rh,x+Wt,y-rh);
+    return y-all.length*rh; };
+
+  /* ---------- a pier: section, footing plan, tables and notes (inches) ---------- */
+  function pierView(b,k){
+    const C=ENG.C, rails=b.rails||{}, eo=ENG.edgeOff(b.sta), wall=!!b.wall;
+    const zs=[b.edgeElev,b.backElev,rails.zNear||b.edgeElev,b.botCap,b.grade]; if(b.ftBot!=null) zs.push(b.ftBot); if(b.pcBot!=null) zs.push(b.pcBot);
+    const zb=Math.floor(Math.min(...zs)-0.5), X=w=>w*12, Y=z=>(z-zb)*12, f3=v=>v==null?'-':(+v).toFixed(3), f2=v=>v==null?'-':(+v).toFixed(2);
+    // platform panel (cross slope), rails and track centreline
+    D.pline(L.conc,[[0,Y(b.edgeElev)],[X(C.W),Y(b.backElev)],[X(C.W),Y(b.backElev-C.panel)],[0,Y(b.edgeElev-C.panel)]],true);
+    const wN=-eo+C.gauge/2, wF=-eo-C.gauge/2;
+    [[wN,rails.zNear],[wF,rails.zFar]].forEach(([w,z])=>{ if(z==null) return; D.rect(L.stl,X(w)-1.4,Y(z)-6,X(w)+1.4,Y(z)); });
+    D.line(L.cl,X(-eo),Y(b.edgeElev)+0.4*k,X(-eo),Y(zb+0.3)); T(L.txt,X(-eo),Y(b.edgeElev)+0.5*k,0.08*k,'CL TRACK',1);
+    // beams and bearing stacks
+    (b.rows||[]).forEach(r=>{ const S=r.sec||{}, x=X(r.off), hb=(S.bf||8)/2, hw=(S.tw||0.4)/2, tf=S.tf||0.6, yT=Y(r.topB), yB=Y(r.botB);
+      D.pline(L.stl,[[x-hb,yT],[x+hb,yT],[x+hb,yT-tf],[x+hw,yT-tf],[x+hw,yB+tf],[x+hb,yB+tf],[x+hb,yB],[x-hb,yB],[x-hb,yB+tf],[x-hw,yB+tf],[x-hw,yT-tf],[x-hb,yT-tf]],true);
+      let z=r.botB; [r.sole,r.elast,r.mas].forEach(t=>{ if(!(t>0)) return; D.rect(L.stl,x-hb-1,Y(z-t),x+hb+1,Y(z)); z-=t; });
+      T(L.txt,x,yB-0.18*k,0.07*k,r.lab+(r.anchor?' (ANCHOR)':''),1); });
+    // pier wall or cap, footing, pedestal, piles
+    const wA=C.capF, wB=C.capF+C.capW;
+    D.pline(L.conc,[[X(wA),Y(b.capFront)],[X(wB),Y(b.capBack)],[X(wB),Y(b.botCap)],[X(wA),Y(b.botCap)]],true);
+    if(b.ftTop!=null) D.rect(L.conc,X(b.ftA),Y(b.ftBot),X(b.ftB),Y(b.ftTop));
+    if(b.ftExcav!=null) D.line(L.ftg,X(b.ftA-1),Y(b.ftExcav),X(b.ftB+1),Y(b.ftExcav));
+    if(C.ped){ const pw=C.pedW/2, pb=b.pedBot!=null?b.pedBot:b.botCap; D.rect(L.conc,X(b.pedOff-pw),Y(pb),X(b.pedOff+pw),Y(b.pedTop));
+      const bobp=b.pedTop+C.grout; D.rect(L.stl,X(b.pedOff)-8,Y(b.pedTop),X(b.pedOff)+8,Y(bobp)); D.rect(L.stl,X(b.pedOff)-8,Y(bobp),X(b.pedOff)+8,Y(b.colBase));
+      const yt=Y(b.colBase+1.6); D.pline(L.stl,[[X(b.pedOff)-6,Y(b.colBase)],[X(b.pedOff)-6,yt],[X(b.pedOff)-1.5,yt-2],[X(b.pedOff)+1.5,yt+2],[X(b.pedOff)+6,yt],[X(b.pedOff)+6,Y(b.colBase)]],false);
+      if(b.pcTop!=null) D.rect(L.conc,X(b.pedOff-C.pcW/2),Y(b.pcBot),X(b.pedOff+C.pcW/2),Y(b.pcTop)); }
+    if(C.pile&&!wall) (b.piles||[]).forEach(pl=>{ const x=X(pl.off); D.rect(L.conc,x-pl.dia*6,Y(pl.cut-2),x+pl.dia*6,Y(pl.cut)); T(L.txt,x,Y(pl.cut-2)-0.14*k,0.07*k,pl.lab,1); });
+    const gL=Math.min(-eo-C.gauge,b.ftA!=null?b.ftA:wA)-2, gR=Math.max(C.W,b.ftB!=null?b.ftB:wB,C.ped?b.pedOff+C.pedW:0)+2;
+    D.line(L.grade,X(gL),Y(b.grade),X(gR),Y(b.grade));
+    // elevations on the right, spread so none overlap
+    const xr=X(gR)+0.3*k, labs=[[b.colBase,'TOP OF BASE PLATE '+f3(b.colBase),C.ped],[C.ped?b.pedTop+C.grout:null,'BOBP '+f3(C.ped?b.pedTop+C.grout:null),C.ped],[b.pedTop,'TOP OF PEDESTAL '+f3(b.pedTop),C.ped],
+      [b.backElev,'TOP OF PLATFORM (BACK) '+f3(b.backElev),true],[b.capBack,(wall?'TOP OF PIER WALL ':'TOP OF CAP ')+f3(b.capBack),true],[b.grade,'GRADE '+f2(b.grade),true],
+      [b.botCap,(wall?'BOT. OF WALL / TOP OF FTG ':'BOTTOM OF CAP ')+f3(b.botCap),true],[b.ftBot,'BOTTOM OF FOOTING '+f3(b.ftBot),b.ftBot!=null],[b.ftExcav,'BOT. OF EXCAVATION '+f3(b.ftExcav),b.ftExcav!=null],
+      [b.pcBot,'BOTTOM OF PILE CAP '+f3(b.pcBot),b.pcBot!=null]].filter(a=>a[2]&&a[0]!=null).sort((a,b2)=>b2[0]-a[0]);
+    let yp=null; labs.forEach(([z,t])=>{ let y=Y(z); if(yp!=null&&yp-y<0.13*k) y=yp-0.13*k; yp=y; D.line(L.el,X(gR)-2,Y(z),xr-0.03*k,y+0.03*k); T(L.el,xr,y,0.075*k,t); });
+    // edge elevations on the track side
+    const xl=X(-eo-C.gauge/2)-0.2*k;
+    T(L.el,xl,Y(b.edgeElev)+0.02*k,0.075*k,'TOP OF PLATFORM (EDGE) '+f3(b.edgeElev),2); D.line(L.el,xl+0.02*k,Y(b.edgeElev)+0.04*k,0,Y(b.edgeElev));
+    if(rails.zNear!=null){ T(L.el,xl,Y(rails.zNear)-0.1*k,0.075*k,'TOP OF RAIL '+f3(rails.zNear),2); D.dimV(L.dim,Y(rails.zNear),Y(b.edgeElev),X(wN)+0.25*k,X(wN),'<> V'); }
+    // horizontal chains: track to the edge, beams and back above; wall, pedestal and footing below
+    const yTop=Y(Math.max(b.edgeElev,b.backElev))+0.35*k;
+    D.chainH(L.dim,[X(-eo),0,...(b.rows||[]).map(r=>X(r.off)),X(C.W)].sort((a,c)=>a-c),yTop,Y(b.edgeElev));
+    const yBot=Y(b.ftBot!=null?b.ftBot:(b.pcBot!=null?b.pcBot:b.botCap))-0.35*k;
+    const lx=[X(wA),X(wB)]; if(b.ftA!=null) lx.push(X(b.ftA),X(b.ftB)); if(C.ped) lx.push(X(b.pedOff-C.pedW/2),X(b.pedOff+C.pedW/2)); lx.push(0);
+    const ux=[...new Set(lx.map(v=>+v.toFixed(3)))].sort((a,c)=>a-c); D.chainH(L.dim,ux,yBot,yBot+0.35*k);
+    if(b.ftA!=null) D.dimH(L.dim,X(b.ftA),X(b.ftB),yBot-0.3*k,null,'<> FOOTING');
+    // vertical chains at the back: platform, wall, footing and grade
+    const xv=X(gR)+0.1*k-0.25*k, vz=[b.backElev,b.backElev-C.panel,b.capBack,b.botCap]; if(b.ftBot!=null) vz.push(b.ftBot);
+    for(let i=0;i<vz.length-1;i++) D.dimV(L.dim,Y(vz[i+1]),Y(vz[i]),X(gR)-0.2*k,X(C.W));
+    if(b.ftBot!=null) D.dimV(L.dim,Y(b.ftBot),Y(b.grade),X(b.ftA)-0.3*k,X(b.ftA),'<> TO BOF');
+    T(L.txt,(X(gL)+X(gR))/2,yBot-0.65*k,0.11*k,'SECTION AT '+b.name+' (LOOKING UP-STATION)',1);
+    // tables and notes, to the right of the section's elevations
+    const tx=xr+2.25*k, ty=Y(Math.max(b.edgeElev,b.backElev))+0.45*k;
+    const rows=[['STATION',formatStation(b.sta)],['SKEW',(+b.skew||0)+' DEG'],['GRADE',f2(b.grade)+(b.gradeOwn?'':' (DEFAULT)')],['TOP OF RAIL (NEAR)',f3(rails.zNear)],
+      ['TOP OF PLATFORM EDGE / BACK',f3(b.edgeElev)+' / '+f3(b.backElev)],[(wall?'TOP OF WALL':'TOP OF CAP')+' FRONT / BACK',f3(b.capFront)+' / '+f3(b.capBack)],
+      [wall?'BOTTOM OF WALL':'BOTTOM OF CAP',f3(b.botCap)],[wall?'WALL HEIGHT':'CAP DEPTH',shFI((b.capRef-b.botCap)*12)],[wall?'WALL':'CAP',shFI(C.capT*12)+' x '+shFI(C.capW*12)+', FRONT '+shFI(C.capF*12)+' BEHIND EDGE']];
+    if(b.ftTop!=null) rows.push(['FOOTING',shFI(b.ftL*12)+' x '+shFI(b.ftW*12)+' x '+shFI(C.ftT*12)],['TOP / BOTTOM OF FOOTING',f3(b.ftTop)+' / '+f3(b.ftBot)],['BOTTOM OF EXCAVATION',f3(b.ftExcav)]);
+    if(C.ped) rows.push(['PEDESTAL',shFI(C.pedW*12)+' SQ., '+shFI(b.pedOff*12)+' BEHIND EDGE'],['TOP / BOTTOM OF PEDESTAL',f3(b.pedTop)+' / '+f3(b.pedBot)],['BOBP / TOP OF BASE PLATE',f3(b.pedTop+C.grout)+' / '+f3(b.colBase)]);
+    if(b.pcTop!=null) rows.push(['PILE CAP TOP / BOTTOM',f3(b.pcTop)+' / '+f3(b.pcBot)]);
+    rows.push(['EXPOSURE ABOVE GRADE',shFI((b.exposure||0)*12)]);
+    const half=Math.ceil(rows.length/2), rows2=[]; for(let i=0;i<half;i++) rows2.push([...rows[i],...(rows[i+half]||['',''])]);
+    let y=tableK(tx,ty,k,b.name+' - PIER DATA',[['ITEM',1.7],['VALUE',1.3],['ITEM',1.6],['VALUE',1.5]],rows2,0.06);
+    const tW=(1.7+1.3+1.6+1.5)*k;
+    y=tableK(tx,y-0.3*k,k,'BEAM SEATS',[['BEAM',0.55],['OFFSET',0.75],['T.O. PLAT.',0.75],['T.O. BEAM',0.75],['SOLE',0.45],['PAD',0.45],['MASONRY',0.6],['SEAT',0.75]],
+      (b.rows||[]).map(r=>[r.lab+(r.anchor?'*':''),shFI(r.off*12),f3(r.zP),f3(r.topB),(r.sole*12).toFixed(2)+'"',(r.elast*12).toFixed(2)+'"',(r.mas*12).toFixed(3)+'"',f3(r.capTop)]),0.065);
+    const notes=['* ANCHOR BEAM: MASONRY PLATE FIXED; OTHERS SOLVED FROM THE CROSS SLOPE.', (C.capMode==='level'?'PIER TOP LEVEL; MASONRY PLATES VARY.':'PIER TOP SLOPED WITH THE PLATFORM; PLATES CONSTANT.'),
+      'TOP OF PLATFORM AT THE EDGE = TOP OF NEAR RAIL + V ('+shFI(C.V*12)+'); CROSS SLOPE '+C.xs+'%.',
+      b.ftTop!=null?'BOTTOM OF FOOTING = GRADE - '+shFI(C.ftBury*12)+'; FOOTING '+shFI(C.ftProj*12)+' PAST THE WALL AND PEDESTAL FACES; '+shFI(C.ftFill*12)+' GRANULAR FILL BELOW.':'MICROPILE TIPS BY THE GEOTECHNICAL DESIGN.',
+      C.ped?'PEDESTAL TOP = PIER TOP + '+shFI(C.pedRise*12)+'; GROUT '+shFI(C.grout*12)+', BASE PLATE '+shFI(C.bplate*12)+'.':''].filter(Boolean);
+    y-=0.25*k; T(L.txt,tx,y,0.09*k,'NOTES'); y-=0.17*k; const mxC=Math.floor(tW/k/(0.06*0.9)); notes.forEach((n,j)=>{ let ln=(j+1)+'. ', out=[]; n.split(' ').forEach(wd=>{ if((ln+wd).length>mxC){ out.push(ln); ln='    '; } ln+=wd+' '; }); out.push(ln);
+      out.forEach(t=>{ T(L.txt,tx,y,0.06*k,t.trimEnd()); y-=0.11*k; }); });
+    // footing plan, to the right of the tables
+    const px0=tx+tW+0.55*k+(b.ftL||C.capT)/2*12, pyc=ty-((b.ftB!=null?b.ftB-b.ftA:C.capW)/2)*12-0.2*k, along=(wall?b.ftL:C.capT)/2, PX=a=>px0+a*12, PY=w=>pyc-(w-(b.ftA!=null?(b.ftA+b.ftB)/2:(wA+wB)/2))*12;
+    if(b.ftTop!=null) D.rect(L.conc,PX(-b.ftL/2),PY(b.ftB),PX(b.ftL/2),PY(b.ftA));
+    D.rect(L.conc,PX(-C.capT/2),PY(wB),PX(C.capT/2),PY(wA));
+    if(C.ped){ const pw=C.pedW/2; D.rect(L.conc,PX(-pw),PY(b.pedOff+pw),PX(pw),PY(b.pedOff-pw)); D.rect(L.stl,PX(-0.5),PY(b.pedOff+0.5),PX(0.5),PY(b.pedOff-0.5)); }
+    (b.rows||[]).forEach(r=>D.line(L.ftg,PX(-along-1),PY(r.off),PX(along+1),PY(r.off)));
+    D.line(L.cl,PX(0),PY(gR),PX(0),PY(gL+3));
+    if(b.ftTop!=null){ D.dimH(L.dim,PX(-C.capT/2),PX(C.capT/2),PY(b.ftB)-0.3*k,PY(wB),'<> WALL'); D.dimH(L.dim,PX(-b.ftL/2),PX(b.ftL/2),PY(b.ftB)-0.6*k,PY(b.ftB),'<> FOOTING');
+      D.dimV(L.dim,PY(b.ftB),PY(b.ftA),PX(b.ftL/2)+0.3*k,PX(b.ftL/2)); }
+    T(L.txt,PX(0),PY(b.ftB!=null?b.ftB:wB)-0.85*k,0.11*k,'PLAN',1); T(L.txt,PX(0),PY(gL+3)-0.12*k,0.07*k,'TRACK SIDE',1);
+    viewTitle((X(gL)+px0)/2,Y(Math.max(b.edgeElev,b.backElev))+1.05*k,k,('PIER '+b.name+' - '+formatStation(b.sta)).toUpperCase(),'');
+  }
+
+  /* ---------- the whole site in plan, along the track (inches) ---------- */
+  function siteView(k){
+    const C=ENG.C, sA=Math.min(C.sta0,C.sta1), sB=Math.max(C.sta0,C.sta1), sm=(sA+sB)/2, a=ENG.align.at(sm), RT=rotator(a.brg-Math.PI/2), P2=p=>{ const q=RT(p); return [q.x*12,q.y*12]; };
+    const RS2=CHAINS.map(ch=>{ try{ return computeChain(ch); }catch(e){ return null; } }).filter(Boolean);
+    let s0=sA, s1=sB; RS2.forEach(R=>{ s0=Math.min(s0,R.sta-25); s1=Math.max(s1,R.sta+25); });
+    const N=60, ss=[]; for(let i=0;i<=N;i++) ss.push(s0-20+(s1-s0+40)*i/N);
+    const eo=ENG.edgeOff(sm);
+    D.pline(L.cl,ss.map(s=>P2(ENG.platPt(s,-eo,0))),false);
+    [-eo-C.gauge/2,-eo+C.gauge/2].forEach(w=>D.pline(L.stl,ss.map(s=>P2(ENG.platPt(s,w,0))),false));
+    const ps=[]; for(let i=0;i<=40;i++) ps.push(sA+(sB-sA)*i/40);
+    D.pline(L.plat,[...ps.map(s=>P2(ENG.platPt(s,0,0))),...ps.slice().reverse().map(s=>P2(ENG.platPt(s,C.W,0)))],true);
+    // stationing along the track centreline
+    for(let st=Math.ceil((s0-20)/50)*50; st<=s1+20; st+=50){ const p=P2(ENG.platPt(st,-eo,0)), q=P2(ENG.platPt(st,-eo-2,0)); D.line(L.cl,p[0],p[1],q[0],q[1]); T(L.txt,q[0],q[1]-0.14*k,0.07*k,formatStation(st),1); }
+    const tl=P2(ENG.platPt(s0-20,-eo,0)); T(L.txt,tl[0],tl[1]+0.06*k,0.08*k,'CL TRACK');
+    // piers and their footings
+    ENG.bents().forEach(b=>{ const sq=(w0,w1,h)=>[[w0,-h],[w1,-h],[w1,h],[w0,h]].map(([w,d])=>P2(ENG.platPt(b.sta+d,w,0)));
+      if(b.ftTop!=null) D.pline(L.ftg,sq(b.ftA,b.ftB,b.ftL/2),true);
+      D.pline(L.conc,sq(C.capF,C.capF+C.capW,C.capT/2),true);
+      const lp=P2(ENG.platPt(b.sta,-1.5,0)); T(L.txt,lp[0],lp[1]-0.03*k,0.08*k,b.name,1); });
+    // pier spacing and platform limits
+    const yE=P2(ENG.platPt(sm,0,0))[1], yK=P2(ENG.platPt(sm,C.W,0))[1], dn=yE<yK?-1:1, yD=yE+dn*(eo+C.gauge)*12+dn*0.35*k;
+    const bx=ENG.bents().map(b=>P2(ENG.platPt(b.sta,0,0))[0]);
+    const xA=P2(ENG.platPt(sA,0,0))[0], xB=P2(ENG.platPt(sB,0,0))[0];
+    D.chainH(L.dim,[xA,...bx,xB].sort((p,q)=>p-q),yD,yE);
+    D.dimH(L.dim,Math.min(xA,xB),Math.max(xA,xB),yD+dn*0.35*k,yE,'<> PLATFORM');
+    const yL=yD+dn*0.6*k-(dn>0?0:0.08*k); T(L.txt,xA,yL,0.075*k,'BEGIN PLATFORM '+formatStation(sA),1); T(L.txt,xB,yL,0.075*k,'END PLATFORM '+formatStation(sB),1);
+    // ramps, stairs, walls, pads, spread footings
+    RS2.forEach(R=>{ R.foot.forEach(f=>{ if(f.kind==='turnmark') return; D.pline(L.conc,f.p.map(P2),true); });
+      (R.walls||[]).forEach(wl=>{ const A=wl.pts[0], B=wl.pts[wl.pts.length-1]; let ux=B.x-A.x, uy=B.y-A.y; const m=Math.hypot(ux,uy); if(m<1e-6) return; ux/=m; uy/=m; const h=R.WALL.t/2;
+        D.pline(L.conc,[[A.x-uy*h,A.y+ux*h],[B.x-uy*h,B.y+ux*h],[B.x+uy*h,B.y-ux*h],[A.x+uy*h,A.y-ux*h]].map(p=>P2({x:p[0],y:p[1]})),true); });
+      const c=P2(R.pts[Math.floor(R.pts.length/2)]); T(L.txt,c[0],c[1]-dn*0.35*k,0.085*k,R.ch.name.toUpperCase(),1); });
+    CFOOT.forEach(cf=>{ const Rc=computeCF(cf); if(!Rc.ok) return; const h=Rc.fL/2;
+      D.pline(L.ftg,[[-1,-1],[1,-1],[1,1],[-1,1]].map(([i,j])=>P2({x:Rc.P.x+Rc.ua.x*h*i+Rc.un.x*h*j,y:Rc.P.y+Rc.ua.y*h*i+Rc.un.y*h*j})),true);
+      const c=P2(Rc.P); T(L.txt,c[0],c[1]-dn*(h*12+0.15*k),0.07*k,cf.name,1); });
+    // north and title
+    const xr=Math.max(xA,xB)+1.2*k, yr=yK-dn*1.0*k, th=a.brg-Math.PI/2, nv=[-Math.sin(th),Math.cos(th)];
+    D.line(L.txt,xr,yr,xr+nv[0]*0.5*k,yr+nv[1]*0.5*k); T(L.txt,xr+nv[0]*0.62*k,yr+nv[1]*0.62*k,0.12*k,'N',1);
+    viewTitle((xA+xB)/2,yD+dn*1.0*k-(dn>0?0:0.3*k),k,'SITE PLAN',(CURNAME||'PLATFORM').toUpperCase()+' PLATFORM, '+formatStation(sA)+' TO '+formatStation(sB)+'; PIERS, RAMPS, STAIRS AND COLUMN FOUNDATIONS');
+  }
+
   /* ---------- build the set ---------- */
   const RS=CHAINS.map(ch=>{ try{ return computeChain(ch); }catch(e){ return null; } }).filter(Boolean);
+  sheet('site','SITE PLAN',k=>siteView(k));
   RS.forEach((R,ri)=>sheet('plan'+ri,(R.ch.name+' plan').toUpperCase(),k=>planView(R,k)));
   // walls two to a sheet when the pair still fits at 1/4" = 1'-0" or larger, otherwise one to a sheet
   RS.forEach((R,ri)=>{ const W=R.walls||[]; let i=0;
@@ -2995,6 +3127,15 @@ function sheetsBuild(){
   const CFs=CFOOT.map(cf=>computeCF(cf)).filter(r=>r.ok);
   for(let i=0;i<CFs.length;i+=2){ const pair=CFs.slice(i,i+2);
     sheet('cf'+i,('column foundations '+pair.map(r=>r.cf.name).join(', ')).toUpperCase(),k=>stack(pair.map(r=>kk=>cfView(r,kk)),k,0.8)); }
+  // pier details, two to a sheet
+  const BS=ENG.bents();
+  for(let i=0;i<BS.length;i+=2){ const pair=BS.slice(i,i+2);
+    sheet('pier'+i,('pier details '+pair.map(b=>b.name).join(', ')).toUpperCase(),k=>stack(pair.map(b=>kk=>pierView(b,kk)),k,0.5)); }
+  // pier schedule
+  sheet('pschd','PIER SCHEDULE',k=>{ const f3=v=>v==null?'-':(+v).toFixed(3), C=ENG.C;
+    const cols=[['PIER',0.55],['STATION',1.05],['GRADE',0.65],['T.O. RAIL',0.8],['T.O.P. EDGE',0.85],['T.O.P. BACK',0.85],['TOP OF WALL',0.85],['BOT. OF WALL',0.85],['BOF',0.75],['BOT. EXCAV.',0.8],['TOP OF PED.',0.8],['BOBP',0.75],['WALL HT.',0.75],['EXPOSURE',0.75],...(BS[0]&&BS[0].rows||[]).map(r=>['MAS. '+r.lab,0.65])];
+    tableK(0,0,1,'PIER SCHEDULE (ELEVATIONS IN FEET)',cols,BS.map(b=>[b.name,formatStation(b.sta),(+b.grade).toFixed(2),f3(b.rails&&b.rails.zNear),f3(b.edgeElev),f3(b.backElev),f3(b.capBack),f3(b.botCap),f3(b.ftBot),f3(b.ftExcav),C.ped?f3(b.pedTop):'-',C.ped?f3(b.pedTop+C.grout):'-',shFI((b.capRef-b.botCap)*12),shFI((b.exposure||0)*12),...(b.rows||[]).map(r=>(r.mas*12).toFixed(3)+'"')]),0.07);
+  },1);
   // schedules and notes, in paper inches
   sheet('sched','WALL AND COLUMN SCHEDULES, NOTES',k=>{
     const table=(x,y,title,cols,rows)=>{ const rh=0.2, th=0.075; T(L.txt,x,y+0.1,0.12,title);
