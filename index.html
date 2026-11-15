@@ -2516,7 +2516,7 @@ function applyPads(ch, walls, WALL, checks){
     const wl=hit.wl, Q=wl.pts, t0=Q[0].t, tN=Q[Q.length-1].t;
     Q.forEach(q=>{ if(q.surf==null) q.surf=q.top-WALL.curb; });
     let ta=hit.tp-len/2, tb=hit.tp+len/2;
-    if(ta-t0<0.5) ta=t0; if(tN-tb<0.5) tb=tN;
+    if(ta-t0<=0.5+1e-6) ta=t0; if(tN-tb<=0.5+1e-6) tb=tN;     // within 6" of a wall end: run to the end
     const at=t=>{ // interpolate the wall at t (last of any duplicates)
       let j=0; while(j<Q.length-2 && Q[j+1].t<t) j++;
       const a=Q[j], b=Q[Math.min(j+1,Q.length-1)], f=(b.t-a.t)>1e-9?Math.max(0,Math.min(1,(t-a.t)/(b.t-a.t))):0;
@@ -2533,7 +2533,7 @@ function applyPads(ch, walls, WALL, checks){
     Q.filter(q=>q.t>tb+1e-6).forEach(q=>pts.push(q));
     pts.forEach(q=>{ q.height=q.ftgTop==null?null:q.top-q.ftgTop; q.exposed=q.grade==null?null:q.top-q.grade; });
     wl.pts=pts;
-    out.push({name, sta, off, ok:true, wall:wl.name, top, len:tb-ta, x:P.x, y:P.y});
+    out.push({name, sta, off, ok:true, wall:wl.name, top, len:tb-ta, x:P.x, y:P.y, pa:{x:A.x,y:A.y}, pb:{x:B.x,y:B.y}});
   });
   walls.forEach(wl=>wl.pts.forEach((q,j)=>{ q.where = q.pad ? q.pad+(j>0&&wl.pts[j-1].pad===q.pad?' pad end':' pad start') : j===0?'start':j===wl.pts.length-1?'end':('break '+j); }));
   return out;
@@ -2826,8 +2826,14 @@ function drawChainPlan(){
     });
     // columns that land on the walls, with their level pads
     if(sel && Q.pads) Q.pads.filter(pd=>pd.ok).forEach((pd,pk)=>{ const c=RT({x:pd.x,y:pd.y}), hs=0.5, lf=pk%2===0;
-      s+=`<rect x="${(TX(c.x)-hs*k).toFixed(1)}" y="${(TY(c.y)-hs*k).toFixed(1)}" width="${(2*hs*k).toFixed(1)}" height="${(2*hs*k).toFixed(1)}" fill="var(--paper)" stroke="var(--oxide)" stroke-width="1.2"/>`+
-         `<text x="${(lf?TX(c.x)-hs*k-3:TX(c.x)+hs*k+3).toFixed(1)}" y="${(TY(c.y)-hs*k-3).toFixed(1)}" text-anchor="${lf?'end':'start'}" font-size="8.5" font-family="monospace" fill="var(--oxide)" paint-order="stroke" stroke="var(--paper)" stroke-width="2.4">${esc(pd.name)} ${pd.top.toFixed(2)}</text>`; });
+      // the level pad: its true length along the wall, the wall's thickness across
+      { let ux=pd.pb.x-pd.pa.x, uy=pd.pb.y-pd.pa.y; const m=Math.hypot(ux,uy)||1; ux/=m; uy/=m;
+        const h2=Q.WALL.t/2+0.08, nx=-uy*h2, ny=ux*h2;
+        const box=[{x:pd.pa.x+nx,y:pd.pa.y+ny},{x:pd.pb.x+nx,y:pd.pb.y+ny},{x:pd.pb.x-nx,y:pd.pb.y-ny},{x:pd.pa.x-nx,y:pd.pa.y-ny}].map(RT);
+        s+=`<path d="M${poly(box)} Z" fill="rgba(184,58,40,.28)" stroke="var(--oxide)" stroke-width="1.2"/>`; }
+      // the column on it
+      s+=`<rect x="${(TX(c.x)-hs*k).toFixed(1)}" y="${(TY(c.y)-hs*k).toFixed(1)}" width="${(2*hs*k).toFixed(1)}" height="${(2*hs*k).toFixed(1)}" fill="var(--paper)" stroke="var(--ink)" stroke-width="1"/>`+
+         `<text x="${(lf?TX(c.x)-hs*k-3:TX(c.x)+hs*k+3).toFixed(1)}" y="${(TY(c.y)-hs*k-3).toFixed(1)}" text-anchor="${lf?'end':'start'}" font-size="8.5" font-family="monospace" fill="var(--oxide)" paint-order="stroke" stroke="var(--paper)" stroke-width="2.4">${esc(pd.name)} pad ${pd.top.toFixed(2)} \u00b7 ${ftin(pd.len)}</text>`; });
     // walking line with direction arrows
     const P=Q.path.map(p=>RT(p));
     if(sel){
