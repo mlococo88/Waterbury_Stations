@@ -187,7 +187,7 @@ Each ramp or stair is a **chain** of segments that starts where it ties into the
 Ramps, stairs and walls show in the 3D view (layers *Ramps & stairs* and *Ramp & stair walls*: ramp slabs, stair treads on stringers, walls with their level pads, and footings). They are not yet in the framing plan, heat map or Calculations tab. They save with the platform (Library / Export JSON).
 
 ### Heat map
-With *Ramps & stairs* ticked (elevation only), ramp runs, landings and stair treads are drawn behind the platform on the same colour scale, with walls in grey and contours across the runs. The frame widens to fit them; the contour interval coarsens in whole multiples when the range gets large, and the platform high/low and stats stay platform-only. Untick it to get the full colour range back on the platform.
+With *Ramps & stairs* ticked (off by default; elevation only), ramp runs, landings and stair treads are drawn behind the platform on the same colour scale, with walls in grey and contours across the runs. The frame widens to fit them; the contour interval coarsens in whole multiples when the range gets large, and the platform high/low and stats stay platform-only. Untick it to get the full colour range back on the platform.
 
 The platform surface unrolled along the track (station across, distance back from the edge down), coloured by one of:
 

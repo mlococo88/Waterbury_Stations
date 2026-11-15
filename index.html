@@ -656,7 +656,7 @@
     <p class="cfg" style="flex-wrap:wrap; gap:14px;">
       <span><input type="checkbox" id="hm_sup" checked> <label for="hm_sup" style="margin:0;display:inline;">Support lines</label></span>
       <span><input type="checkbox" id="hm_beam" checked> <label for="hm_beam" style="margin:0;display:inline;">Beam lines</label></span>
-      <span><input type="checkbox" id="hm_ramp" checked> <label for="hm_ramp" style="margin:0;display:inline;">Ramps &amp; stairs (elevation)</label></span>
+      <span><input type="checkbox" id="hm_ramp"> <label for="hm_ramp" style="margin:0;display:inline;">Ramps &amp; stairs (elevation)</label></span>
       <span><input type="checkbox" id="hm_ext" checked> <label for="hm_ext" style="margin:0;display:inline;">Mark high and low points</label></span>
     </p>
   </fieldset>
@@ -3263,7 +3263,7 @@ function drawHeat(){
 function bindHeat(){
   const svg=document.getElementById('svg_heat'); if(!svg||svg._hb) return; svg._hb=true;
   ['hm_metric','hm_nx','hm_ny','hm_ci','hm_sup','hm_beam','hm_ext','hm_ramp'].forEach(id=>{
-    const e=document.getElementById(id); if(e) e.addEventListener('input',drawHeat); });
+    const e=document.getElementById(id); if(e){ e.addEventListener('input',drawHeat); e.addEventListener('change',drawHeat); } });
   const box=document.getElementById('hovbox');
   svg.addEventListener('mousemove',e=>{
     const m=svg._hm; if(!m||!HM_GRID||!ENG){ return; }
