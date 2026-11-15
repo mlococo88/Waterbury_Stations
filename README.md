@@ -188,6 +188,15 @@ Each ramp or stair is a **chain** of segments that starts where it ties into the
 
 The 3D view paints in three layers (wholly below grade, the ground and anything crossing it, wholly above grade) so buried footings always read as below the semi-transparent ground; ramp walls are split at grade for this. Ramps, stairs and walls show in the 3D view (layers *Ramps & stairs* and *Ramp & stair walls*: ramp slabs, stair treads on stringers, walls with their level pads, and footings). They are not yet in the framing plan, heat map or Calculations tab. They save with the platform (Library / Export JSON).
 
+### Columns on spread footings
+Free-standing columns (for example canopy columns on SV-2, off the piers and ramp walls) on a square pedestal and spread footing, in the Ramps & Stairs tab.
+
+- Placed by station and distance behind the platform back edge.
+- **Grade** as entered, or the lowest grade entered at the piers either side, or the default grade.
+- Top of pedestal = grade + reveal (default 8"); bottom of base plate = top of pedestal + grout (platform grout pad unless set); top of base plate = BOBP + plate (default 1"); bottom of footing = grade − depth below grade (default 3'-6"), or set directly; top of footing = BOF + thickness.
+- Defaults follow SP-207: 1'-6" pedestal, 4'-6" × 4'-6" × 1'-6" footing, HSS 8×8 column.
+- Outputs: a table (station, offset, coordinates, grade, top of pedestal, BOBP, top of base plate, TOF, BOF, pedestal height, cover, checks), a true-scale elevation and plan of the selected foundation with full dimensions and elevations, the footing/pedestal/column in the Ramps & Stairs plan, and footing, pedestal, grout, plate and column in 3D.
+
 ### Heat map
 With *Ramps & stairs* ticked (off by default; elevation only), ramp runs, landings and stair treads are drawn behind the platform on the same colour scale, with walls in grey and contours across the runs. The frame widens to fit them; the contour interval coarsens in whole multiples when the range gets large, and the platform high/low and stats stay platform-only. Untick it to get the full colour range back on the platform.
 

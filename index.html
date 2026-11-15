@@ -634,6 +634,16 @@
   <div id="ch_walls" class="scroll"></div>
   <h2 class="sec mt">Results</h2>
   <div id="ch_results" class="scroll"></div>
+
+  <h2 class="sec mt">Columns on spread footings</h2>
+  <p class="note" style="margin-top:0;">Free-standing columns (canopy columns off the piers and walls) on a concrete pedestal and spread footing. Top of pedestal = grade + reveal; bottom of base plate = top of pedestal + grout; bottom of footing = grade &minus; depth below grade.</p>
+  <div id="cf_edit" class="scroll"></div>
+  <div class="svgcard" style="margin-top:14px;">
+    <div class="cap"><span>Column foundation &mdash; elevation and plan (true scale)</span><span id="cf_pick" style="display:flex; gap:4px; flex-wrap:wrap;"></span>
+      <span class="gctrl"><button data-sz="svg_cfelev" data-a="in">+</button><button data-sz="svg_cfelev" data-a="out">&minus;</button><button data-sz="svg_cfelev" data-a="fit">Fit</button></span></div>
+    <svg id="svg_cfelev" viewBox="0 0 1500 560"></svg>
+  </div>
+  <div id="cf_tbl" class="scroll" style="margin-top:10px;"></div>
 </section>
 
 <!-- ============ TAB 9: HEAT MAP ============ -->
@@ -993,7 +1003,7 @@ function beamDepthFt(b){ const S=WSHAPES[b&&b.shape]; return S ? S[0]/12 : (+((b
 /* ============================================================
    STATE
    ============================================================ */
-let ELEMS=[], VPIS=[], SUPERS=[], PVPIS=[], BEAMS=[], BENTS=[], PILES=[], CHAINS=[];
+let ELEMS=[], VPIS=[], SUPERS=[], PVPIS=[], BEAMS=[], BENTS=[], PILES=[], CHAINS=[], CFOOT=[];
 let ENG=null, ACTIVE_STA=null, _armed=false;
 
 function freshDefaults(){
@@ -2175,6 +2185,19 @@ function draw3D(){
     if(gb('v3d_lab') && R.pts.length) labels3.push({p:{x:R.pts[0].x,y:R.pts[0].y,z:R.z0+2.5}, t:ch.name||''});
   });
 
+  // ---- columns on spread footings ----
+  CFOOT.forEach(cf=>{ const Rc=computeCF(cf); if(!Rc.ok) return;
+    if(Rc.sta<s0-80||Rc.sta>s1+80) return;
+    const u=Rc.ua, P=Rc.P;
+    const box=(ha,hn,zb,zt,col,lay)=>slab({x:P.x-u.x*ha,y:P.y-u.y*ha},{x:P.x+u.x*ha,y:P.y+u.y*ha},2*hn,zt,zt,zb,zb,col,lay);
+    if(gb('v3d_cap')) box(Rc.fL/2,Rc.fW/2,Rc.bof,Rc.tof,COL3.rftg,'under');
+    if(gb('v3d_ped')){ box(Rc.ped/2,Rc.ped/2,Rc.tof,Rc.grade,COL3.ped,'under'); box(Rc.ped/2,Rc.ped/2,Rc.grade,Rc.topPed,COL3.ped,'above'); }
+    if(gb('v3d_col')){ const hb=Rc.hss/2+4/12;
+      box(hb,hb,Rc.topPed,Rc.bobp,COL3.cap,'above'); box(hb,hb,Rc.bobp,Rc.tobp,COL3.beam,'above');
+      box(Rc.hss/2,Rc.hss/2,Rc.tobp,Rc.colTop,COL3.col,'above'); }
+    if(gb('v3d_lab')) labels3.push({p:{x:P.x,y:P.y,z:Rc.colTop+0.8}, t:cf.name});
+  });
+
   // ---- track ----
   if(gb('v3d_rail')) [1,-1].forEach(sd=>{
     sweep(span(NS), s=>{ const w=sd*C.gauge/2-ENG.edgeOff(s), R=ENG.rails(s), z=(sd>0?R.zNear:R.zFar);
@@ -2912,6 +2935,15 @@ function drawChainPlan(){
     const p1=RT(ENG.platPt(b.sta,0,0)), p2=RT(ENG.platPt(b.sta,C.W,0));
     s+=`<line x1="${TX(p1.x).toFixed(1)}" y1="${TY(p1.y).toFixed(1)}" x2="${TX(p2.x).toFixed(1)}" y2="${TY(p2.y).toFixed(1)}" stroke="var(--ink)" stroke-width="0.6" opacity="0.35"/>`;
     s+=`<text x="${TX(p1.x).toFixed(1)}" y="${(TY(p1.y)+12).toFixed(1)}" font-size="8" font-family="monospace" fill="var(--ink-soft)" text-anchor="middle">${esc(b.name)}</text>`; });
+  // columns on spread footings: footing dashed, pedestal, column, label
+  CFOOT.forEach((cf,ci)=>{ const Rc=computeCF(cf); if(!Rc.ok) return;
+    const c0=RT(Rc.P); if(TX(c0.x)<-40||TX(c0.x)>W+40) return;
+    const sq=(ha,hn)=>{ const u=Rc.ua, n=Rc.un; return [[-1,-1],[1,-1],[1,1],[-1,1]].map(([i,j])=>RT({x:Rc.P.x+u.x*ha*i+n.x*hn*j, y:Rc.P.y+u.y*ha*i+n.y*hn*j})); };
+    s+=`<path d="M${poly(sq(Rc.fL/2,Rc.fW/2))} Z" fill="rgba(28,26,23,.06)" stroke="var(--graphite)" stroke-width="0.9" stroke-dasharray="4 3"/>`;
+    s+=`<path d="M${poly(sq(Rc.ped/2,Rc.ped/2))} Z" fill="rgba(28,26,23,.18)" stroke="var(--ink)" stroke-width="1"/>`;
+    s+=`<path d="M${poly(sq(Rc.hss/2,Rc.hss/2))} Z" fill="var(--paper)" stroke="var(--ink)" stroke-width="1"/>`;
+    s+=`<text x="${(TX(c0.x)).toFixed(1)}" y="${(TY(c0.y)-Rc.fW/2*k-4).toFixed(1)}" text-anchor="middle" font-size="8.5" font-family="monospace" fill="var(--ink)" paint-order="stroke" stroke="var(--paper)" stroke-width="2.4">${esc(cf.name)} BOBP ${Rc.bobp.toFixed(2)}</text>`;
+  });
   s+=northArrow(W-36,40,a.brg-Math.PI/2,22)+scaleBar(pad,H-14,k);
   s+=`<text x="${W-pad}" y="${H-12}" font-size="8.5" font-family="monospace" fill="var(--ink-soft)" text-anchor="end">up-station →</text>`;
   svg.innerHTML=svgWrap('svg_chplan',s,W,H);
@@ -3146,7 +3178,153 @@ function renderWallTable(){
   h+='</table><p class="note">Coordinates are the wall centreline. Wall height is top of wall to top of footing. '+(R.isStair?'Top of the stair support wall is the platform less the FRP and bearing stack; grade is the grade at the wall.':'Grade under the walls runs in a straight line from the top grade to the bottom grade along the walking path.')+(R.WALL.bofFix!=null?' Footings are level at '+R.WALL.bofFix.toFixed(2)+'.':'')+'</p>';
   box.innerHTML=h;
 }
-function renderChains(){ renderChainUI(); drawChainPlan(); drawChainProfile(); drawWallElev(); renderWallTable(); renderChainResults(); }
+// ===== Columns on spread footings =====
+// Each column is placed by station and distance behind the platform back edge. Grade is
+// entered, or else the lowest grade entered at the piers either side, or the default grade.
+let CF_SEL=0;
+function newCF(){ const C=ENG.C, s=(C.sta0+C.sta1)/2;
+  return {name:'C'+(CFOOT.length+1), sta:+s.toFixed(2), off:16.583, grade:'', revealIn:8, pedIn:18, ftgL:4.5, ftgW:4.5, ftgT:1.5, frost:3.5,
+          groutIn:'', bpIn:'', hssIn:8, colHt:'', bofOvr:''}; }
+function computeCF(cf){
+  const C=ENG.C, num=(v,d)=>{ const t=String(v==null?'':v).trim(); return t===''||!isFinite(parseFloat(t))?d:parseFloat(t); };
+  const sta=+cf.sta, off=num(cf.off,0);
+  const P=ENG.platPt(sta, C.W+off, 0), Pa=ENG.platPt(sta+1, C.W+off, 0), Pb=ENG.platPt(sta, C.W+off+1, 0);
+  const ua={x:Pa.x-P.x,y:Pa.y-P.y}, un={x:Pb.x-P.x,y:Pb.y-P.y};
+  let grade=null, gsrc='';
+  const gIn=String(cf.grade==null?'':cf.grade).trim();
+  if(gIn!=='' && isFinite(parseFloat(gIn))){ grade=parseFloat(gIn); gsrc='entered'; }
+  else { let Bs=[]; try{ Bs=ENG.bents().slice().sort((a,b)=>a.sta-b.sta); }catch(e){}
+    const below=Bs.filter(b=>b.sta<=sta+1e-6).pop(), above=Bs.find(b=>b.sta>sta+1e-6);
+    const near=[below,above].filter(Boolean), own=near.filter(b=>b.gradeOwn&&b.grade!=null);
+    if(own.length){ const m=own.reduce((a,b)=>b.grade<a.grade?b:a); grade=m.grade; gsrc='lowest entered at '+own.map(b=>b.name).join(', '); }
+    else if(C.grade0!=null&&isFinite(C.grade0)){ grade=C.grade0; gsrc='no grade entered at '+(near.map(b=>b.name).join(', ')||'nearby piers')+'; default grade'; } }
+  const reveal=num(cf.revealIn,8)/12, ped=num(cf.pedIn,18)/12, fL=num(cf.ftgL,4.5), fW=num(cf.ftgW,4.5), fT=num(cf.ftgT,1.5), frost=num(cf.frost,3.5);
+  const grout=num(cf.groutIn, C.grout*12)/12, bp=num(cf.bpIn,1)/12, hss=num(cf.hssIn,8)/12, cht=num(cf.colHt, C.colHt>0?C.colHt:12);
+  if(grade==null) return {cf, ok:false, P, sta, off, gsrc:'no grade'};
+  const topPed=grade+reveal, bobp=topPed+grout, tobp=bobp+bp;
+  const bofO=String(cf.bofOvr==null?'':cf.bofOvr).trim();
+  const bof= bofO!==''&&isFinite(parseFloat(bofO)) ? parseFloat(bofO) : grade-frost, tof=bof+fT;
+  const checks=[];
+  if(grade-bof<frost-0.005) checks.push(`bottom of footing only ${ftin(grade-bof)} below grade (${ftin(frost)} required)`);
+  if(tof>grade) checks.push('top of footing is above grade');
+  return {cf, ok:true, P, ua, un, sta, off, grade, gsrc, reveal, ped, fL, fW, fT, frost, grout, bp, hss, cht,
+          topPed, bobp, tobp, bof, tof, pedH:topPed-tof, cover:grade-tof, colTop:tobp+cht, checks};
+}
+function cfSet(i,k,v){ CFOOT[i][k]=v; refreshAll(); }
+function cfAdd(){ CFOOT.push(newCF()); CF_SEL=CFOOT.length-1; refreshAll(); }
+function cfDel(i){ CFOOT.splice(i,1); CF_SEL=Math.max(0,Math.min(CF_SEL,CFOOT.length-1)); refreshAll(); }
+function cfPick(i){ CF_SEL=i; renderCF(); }
+function renderCF(){
+  const ed=document.getElementById('cf_edit'), tb=document.getElementById('cf_tbl'), pick=document.getElementById('cf_pick');
+  if(!ed||!ENG) return;
+  const C=ENG.C;
+  const inp=(i,k,w,ph)=>`<input type="text" style="width:${w}px" value="${esc(CFOOT[i][k]==null?'':CFOOT[i][k])}" placeholder="${ph==null?'':ph}" onchange="cfSet(${i},'${k}',this.value)">`;
+  let h=`<table class="subtbl"><tr><th class="lbl">Column</th><th>Station</th><th>Behind back edge (ft)</th><th>Grade</th><th>Reveal (in)</th><th>Pedestal (in sq)</th><th>Footing L &times; W (ft)</th><th>Footing thick (ft)</th><th>Min. below grade (ft)</th><th>BOF set (ft)</th><th>Grout (in)</th><th>Base plate (in)</th><th>HSS (in)</th><th></th></tr>`;
+  CFOOT.forEach((cf,i)=>{ const R=computeCF(cf);
+    h+=`<tr${i===CF_SEL?' style="background:rgba(27,110,120,.10)"':''}><td class="lbl">${inp(i,'name',56)}</td>
+      <td><input type="text" style="width:92px" value="${formatStation(+cf.sta)}" onchange="cfSet(${i},'sta',parseStation(this.value))"></td>
+      <td>${inp(i,'off',60)}</td><td>${inp(i,'grade',64,R.grade!=null?R.grade.toFixed(2):'')}</td><td>${inp(i,'revealIn',40)}</td><td>${inp(i,'pedIn',40)}</td>
+      <td>${inp(i,'ftgL',40)} &times; ${inp(i,'ftgW',40)}</td><td>${inp(i,'ftgT',40)}</td><td>${inp(i,'frost',40)}</td><td>${inp(i,'bofOvr',60,'')}</td>
+      <td>${inp(i,'groutIn',40,(C.grout*12).toFixed(2))}</td><td>${inp(i,'bpIn',40,'1')}</td><td>${inp(i,'hssIn',36)}</td>
+      <td><button class="sm ghost" onclick="cfDel(${i})">&times;</button></td></tr>`; });
+  h+=`</table><button class="sm ghost" style="margin-top:6px;" onclick="cfAdd()">+ Column on spread footing</button>
+    <p class="note" style="margin:4px 0 0;">Grade blank: the lowest grade entered at the piers either side, else the default grade. BOF set overrides grade &minus; depth. Grout blank: the platform's grout pad (Structure tab).</p>`;
+  ed.innerHTML=h;
+  if(pick) pick.innerHTML=CFOOT.map((cf,i)=>`<button class="sm ${i===CF_SEL?'':'ghost'}" onclick="cfPick(${i})">${esc(cf.name||('C'+(i+1)))}</button>`).join('');
+  // output table
+  if(!CFOOT.length){ tb.innerHTML=''; drawCFElev(); return; }
+  const f=v=>v==null?'—':v.toFixed(3);
+  let t=`<table class="wide"><tr><th class="lbl">Column</th><th>Station</th><th>Behind back edge</th><th>Northing</th><th>Easting</th><th>Grade</th><th>Top of pedestal</th><th>Bottom of base plate</th><th>Top of base plate</th><th>Top of footing</th><th>Bottom of footing</th><th>Pedestal height</th><th>Cover over footing</th><th class="lbl">Grade from</th><th class="lbl">Checks</th></tr>`;
+  CFOOT.forEach((cf,i)=>{ const R=computeCF(cf);
+    if(!R.ok){ t+=`<tr><td class="lbl">${esc(cf.name)}</td><td colspan="14" class="lbl bad">no grade</td></tr>`; return; }
+    t+=`<tr><td class="lbl"><a href="#" onclick="cfPick(${i});return false;"><strong>${esc(cf.name)}</strong></a></td><td>${formatStation(R.sta)}</td><td>${ftin(R.off)}</td><td>${R.P.y.toFixed(3)}</td><td>${R.P.x.toFixed(3)}</td>`+
+       `<td>${R.grade.toFixed(2)}</td><td>${f(R.topPed)}</td><td><strong>${f(R.bobp)}</strong></td><td>${f(R.tobp)}</td><td>${f(R.tof)}</td><td><strong>${f(R.bof)}</strong></td>`+
+       `<td>${ftin(R.pedH)}</td><td>${ftin(R.cover)}</td><td class="lbl note">${esc(R.gsrc)}</td><td class="lbl ${R.checks.length?'bad':'good'}">${R.checks.length?R.checks.join('; '):'OK'}</td></tr>`; });
+  t+='</table><p class="note">Coordinates are the column centre. Footing length runs along the track.</p>';
+  tb.innerHTML=t;
+  drawCFElev();
+}
+function drawCFElev(){
+  const svg=document.getElementById('svg_cfelev'); if(!svg||!ENG) return;
+  if(!CFOOT.length){ svg.innerHTML=''; return; }
+  if(CF_SEL>=CFOOT.length) CF_SEL=0;
+  const R=computeCF(CFOOT[CF_SEL]); if(!R.ok){ svg.innerHTML=''; return; }
+  const FR=['','⅛','¼','⅜','½','⅝','¾','⅞'];
+  const fi=v=>{ let n=Math.round(Math.abs(v)*96); const ft=Math.floor(n/96); n-=ft*96; const inch=Math.floor(n/8), e=n-inch*8; return (v<0?'-':'')+ft+"'-"+inch+(e?' '+FR[e]:'')+'"'; };
+  const F=v=>v.toFixed(1);
+  const W=1500, H=560;
+  const stub=Math.max(2,R.hss*3);
+  const zHi=R.tobp+stub+0.6, zLo=R.bof-0.6;
+  // elevation on the left half, plan on the right half, same scale
+  const k=Math.min(620/Math.max(R.fL,R.fW)/1.15, (H-170)/(zHi-zLo), 560/Math.max(R.fL,R.fW));
+  const exc=380, eyTop=95;                                   // elevation centre x, top margin
+  const EX=t=>exc+t*k, EY=z=>eyTop+(zHi-z)*k;
+  const txt=(x,y,t,o={})=>`<text x="${F(x)}" y="${F(y)}" font-size="${o.fs||9}" font-family="monospace" fill="${o.c||'var(--ink)'}" text-anchor="${o.a||'middle'}"${o.b?' font-weight="bold"':''}${o.r?` transform="rotate(-90 ${F(x)} ${F(y)})"`:''} paint-order="stroke" stroke="var(--paper)" stroke-width="2.6">${t}</text>`;
+  const tick=(x,y)=>`<line x1="${F(x-3.5)}" y1="${F(y+3.5)}" x2="${F(x+3.5)}" y2="${F(y-3.5)}" stroke="var(--ink)" stroke-width="1.1"/>`;
+  const hdim=(xa,xb,y,l)=>`<line x1="${F(xa)}" y1="${F(y)}" x2="${F(xb)}" y2="${F(y)}" stroke="var(--ink)" stroke-width="0.7"/>`+tick(xa,y)+tick(xb,y)+(xb-xa>30?txt((xa+xb)/2,y-4,l,{fs:8.5}):txt(xb+4,y+3,l,{fs:8.5,a:'start'}));
+  const vdim=(x,ya,yb,l,side)=>{ if(Math.abs(yb-ya)<1.5) return ''; let r=`<line x1="${F(x)}" y1="${F(ya)}" x2="${F(x)}" y2="${F(yb)}" stroke="var(--ink)" stroke-width="0.7"/>`+tick(x,ya)+tick(x,yb);
+    r+= Math.abs(yb-ya)>l.length*5.4+6 ? txt(x+(side<0?10:-4),(ya+yb)/2,l,{fs:8.5,r:true}) : txt(x+(side<0?-5:5),(ya+yb)/2+3,l,{fs:8,a:side<0?'end':'start'}); return r; };
+  const ext=(x1,x2,y)=>`<line x1="${F(x1)}" y1="${F(y)}" x2="${F(x2)}" y2="${F(y)}" stroke="var(--ink-soft)" stroke-width="0.4"/>`;
+  let s='';
+  // --- elevation (looking along the track: footing width across)
+  const hw=R.fW/2, hp=R.ped/2, hb=R.hss/2+4/12, hc=R.hss/2;
+  s+=`<rect x="${F(EX(-hw))}" y="${F(EY(R.tof))}" width="${F(R.fW*k)}" height="${F(R.fT*k)}" fill="rgba(28,26,23,.22)" stroke="var(--ink)" stroke-width="1"/>`;
+  s+=`<rect x="${F(EX(-hp))}" y="${F(EY(R.topPed))}" width="${F(R.ped*k)}" height="${F((R.topPed-R.tof)*k)}" fill="rgba(28,26,23,.09)" stroke="var(--ink)" stroke-width="1.3"/>`;
+  s+=`<rect x="${F(EX(-hb))}" y="${F(EY(R.bobp))}" width="${F(2*hb*k)}" height="${F(R.grout*k)}" fill="rgba(140,136,126,.6)" stroke="var(--ink)" stroke-width="0.6"/>`;
+  s+=`<rect x="${F(EX(-hb))}" y="${F(EY(R.tobp))}" width="${F(2*hb*k)}" height="${F(R.bp*k)}" fill="var(--ink)"/>`;
+  const yt=EY(R.tobp+stub);
+  s+=`<path d="M${F(EX(-hc))},${F(EY(R.tobp))} L${F(EX(-hc))},${F(yt+5)} L${F(EX(0)-4)},${F(yt+10)} L${F(EX(0)+4)},${F(yt)} L${F(EX(hc))},${F(yt+5)} L${F(EX(hc))},${F(EY(R.tobp))} Z" fill="rgba(92,98,106,.35)" stroke="var(--ink)" stroke-width="1"/>`;
+  s+=txt(EX(hc)+6,EY(R.tobp+stub*0.6),'HSS '+(R.hss*12).toFixed(0)+'×'+(R.hss*12).toFixed(0),{fs:8.5,a:'start',c:'var(--ink-soft)'});
+  s+=`<line x1="${F(EX(-hw-2.2))}" y1="${F(EY(R.grade))}" x2="${F(EX(hw+2.2))}" y2="${F(EY(R.grade))}" stroke="var(--good)" stroke-width="1.3" stroke-dasharray="8 3"/>`;
+  s+=`<line x1="0" y1="0" x2="0" y2="0"/>`;
+  s+=`<line x1="${F(EX(0))}" y1="${F(EY(R.tobp+stub+0.4))}" x2="${F(EX(0))}" y2="${F(EY(R.bof)+14)}" stroke="var(--ink-soft)" stroke-width="0.5" stroke-dasharray="10 3 2 3"/>`;
+  // elevations on the right
+  const xr0=EX(hw)+10, xrL=EX(hw)+150;
+  [[R.tobp,'TOP OF BASE PLATE '+R.tobp.toFixed(2),'var(--ink-soft)',false],[R.bobp,'BOBP '+R.bobp.toFixed(2),'var(--oxide)',true],[R.topPed,'TOP OF PEDESTAL '+R.topPed.toFixed(2),'var(--ink)',true],
+   [R.grade,'GRADE '+R.grade.toFixed(2),'var(--good)',false],[R.tof,'TOF '+R.tof.toFixed(2),'var(--ink)',false],[R.bof,'BOF '+R.bof.toFixed(2),'var(--ink)',true]]
+   .forEach(([z,l,c,b],j,arr)=>{ // keep labels from colliding
+     let y=EY(z)+3; if(j>0){ const yp=arr[j-1]._y; if(y-yp<12) y=yp+12; } arr[j]._y=y;
+     const xs = (z>=R.topPed-1e-6) ? EX(hb) : (z>=R.grade-1e-6? EX(hp) : EX(hw));
+     s+=`<line x1="${F(xs+2)}" y1="${F(EY(z))}" x2="${F(xrL-4)}" y2="${F(y-3)}" stroke="var(--ink-soft)" stroke-width="0.4"/>`+txt(xrL,y,l,{a:'start',b,c,fs:9}); });
+  // vertical chains on the left
+  const xa=EX(-hw)-26, xb=EX(-hw)-62, xc=EX(-hw)-98;
+  [R.tobp,R.bobp,R.topPed,R.grade,R.tof,R.bof].forEach(z=>{ s+=ext(EX(-hp)-2,xc-4,EY(z)); });
+  // grout and plate are thin: one dimension for both, described beside it
+  s+=vdim(xa,EY(R.tobp),EY(R.topPed),'',-1)+txt(xa-6,EY(R.topPed)-2,fi(R.grout).replace(/^0'-/,'')+' GROUT + '+fi(R.bp).replace(/^0'-/,'')+' PLATE',{fs:8,a:'end'});
+  s+=vdim(xa,EY(R.topPed),EY(R.grade),fi(R.reveal)+' REVEAL',-1)+
+     vdim(xa,EY(R.grade),EY(R.tof),fi(R.cover),-1)+vdim(xa,EY(R.tof),EY(R.bof),fi(R.fT),-1);
+  s+=vdim(xb,EY(R.topPed),EY(R.tof),fi(R.pedH)+' PEDESTAL',-1);
+  s+=vdim(xc,EY(R.grade),EY(R.bof),fi(R.grade-R.bof)+(R.grade-R.bof>=R.frost-0.005?' (MIN. '+fi(R.frost)+')':''),-1);
+  // horizontal dims below
+  const yb1=EY(R.bof)+30, yb2=EY(R.bof)+54;
+  s+=hdim(EX(-hw),EX(-hp),yb1,fi(R.fW/2-R.ped/2))+hdim(EX(-hp),EX(hp),yb1,fi(R.ped))+hdim(EX(hp),EX(hw),yb1,fi(R.fW/2-R.ped/2));
+  s+=hdim(EX(-hw),EX(hw),yb2,fi(R.fW)+' FOOTING');
+  s+=txt(exc,yb2+30,'ELEVATION — '+esc(R.cf.name),{fs:11,b:true});
+  // --- plan
+  const pcx=1140, pcy=eyTop+(zHi-zLo)*k/2-10;
+  const PX=a=>pcx+a*k, PY=n=>pcy-n*k;
+  const rect=(hx,hy,st)=>`<rect x="${F(PX(-hx))}" y="${F(PY(hy))}" width="${F(2*hx*k)}" height="${F(2*hy*k)}" ${st}/>`;
+  s+=rect(R.fL/2,R.fW/2,'fill="rgba(28,26,23,.10)" stroke="var(--ink)" stroke-width="1" stroke-dasharray="6 3"');
+  s+=rect(hp,hp,'fill="rgba(28,26,23,.14)" stroke="var(--ink)" stroke-width="1.2"');
+  s+=rect(hb,hb,'fill="none" stroke="var(--ink)" stroke-width="0.8"');
+  s+=rect(hc,hc,'fill="rgba(92,98,106,.45)" stroke="var(--ink)" stroke-width="1"');
+  s+=`<line x1="${F(PX(-R.fL/2-0.8))}" y1="${F(PY(0))}" x2="${F(PX(R.fL/2+0.8))}" y2="${F(PY(0))}" stroke="var(--ink-soft)" stroke-width="0.5" stroke-dasharray="10 3 2 3"/>`;
+  s+=`<line x1="${F(PX(0))}" y1="${F(PY(R.fW/2+0.8))}" x2="${F(PX(0))}" y2="${F(PY(-R.fW/2-0.8))}" stroke="var(--ink-soft)" stroke-width="0.5" stroke-dasharray="10 3 2 3"/>`;
+  const py1=PY(-R.fW/2)+26, py2=PY(-R.fW/2)+50;
+  s+=hdim(PX(-R.fL/2),PX(-hp),py1,fi(R.fL/2-hp))+hdim(PX(-hp),PX(hp),py1,fi(R.ped))+hdim(PX(hp),PX(R.fL/2),py1,fi(R.fL/2-hp));
+  s+=hdim(PX(-R.fL/2),PX(R.fL/2),py2,fi(R.fL)+' ALONG TRACK');
+  const px1=PX(R.fL/2)+26, px2=PX(R.fL/2)+52;
+  s+=vdim(px1,PY(R.fW/2),PY(hp),fi(R.fW/2-hp),1)+vdim(px1,PY(hp),PY(-hp),fi(R.ped),1)+vdim(px1,PY(-hp),PY(-R.fW/2),fi(R.fW/2-hp),1);
+  s+=vdim(px2,PY(R.fW/2),PY(-R.fW/2),fi(R.fW),1);
+  s+=txt(PX(0),PY(R.fW/2)-12,'← down-station · up-station →   (track below)',{fs:8,c:'var(--ink-soft)'});
+  s+=txt(pcx,py2+30,'PLAN',{fs:11,b:true});
+  // header
+  s+=`<text x="16" y="22" font-size="11" font-family="monospace" fill="var(--ink)" font-weight="bold">${esc(R.cf.name)}</text>`+
+     `<text x="${24+String(R.cf.name||'').length*7.2}" y="22" font-size="9" font-family="monospace" fill="var(--ink-soft)">${formatStation(R.sta)} · ${fi(R.off)} behind back edge · N ${R.P.y.toFixed(2)} E ${R.P.x.toFixed(2)} · grade ${R.grade.toFixed(2)} (${esc(R.gsrc)}) · ${fi(R.grout)} grout · ${fi(R.bp)} base plate · true scale</text>`;
+  s+=`<line x1="16" y1="37" x2="42" y2="37" stroke="var(--good)" stroke-width="1.3" stroke-dasharray="8 3"/><text x="48" y="40" font-size="8.5" font-family="monospace" fill="var(--ink-soft)">grade</text>`;
+  svg.innerHTML=svgWrap('svg_cfelev',s,W,H);
+}
+function renderChains(){ renderChainUI(); drawChainPlan(); drawChainProfile(); drawWallElev(); renderWallTable(); renderChainResults(); renderCF(); }
 
 /* ============================================================
    HEAT MAP
@@ -4099,6 +4277,7 @@ function refreshAll(){
   REDRAW['svg_chplan']=drawChainPlan;
   REDRAW['svg_chprof']=drawChainProfile;
   REDRAW['svg_chwall']=drawWallElev;
+  REDRAW['svg_cfelev']=drawCFElev;
   REDRAW['svg_3d']=draw3D;
   if(_armed) autosave();
 }
@@ -4253,7 +4432,7 @@ const CHECKS=['hm_sup','hm_beam','hm_ext','hm_ramp','p_widen','s_ped','s_pile','
 let CURNAME=null;
 
 function serialize(){
-  const o={version:1, savedAt:new Date().toISOString(), name:CURNAME, ELEMS, VPIS, SUPERS, PVPIS, BEAMS, BENTS, PILES, CHAINS, f:{}, c:{}};
+  const o={version:1, savedAt:new Date().toISOString(), name:CURNAME, ELEMS, VPIS, SUPERS, PVPIS, BEAMS, BENTS, PILES, CHAINS, CFOOT, f:{}, c:{}};
   FIELDS.forEach(id=>{ const e=document.getElementById(id); if(e) o.f[id]=e.value; });
   CHECKS.forEach(id=>{ const e=document.getElementById(id); if(e) o.c[id]=e.checked; });
   return o;
@@ -4261,7 +4440,7 @@ function serialize(){
 function apply(o){
   if(!o) return;
   if(o.ELEMS) ELEMS=o.ELEMS; if(o.VPIS) VPIS=o.VPIS; if(o.SUPERS) SUPERS=o.SUPERS;
-  if(o.PVPIS) PVPIS=o.PVPIS; if(o.BEAMS) BEAMS=o.BEAMS; if(o.BENTS) BENTS=o.BENTS; if(o.PILES) PILES=o.PILES; CHAINS=Array.isArray(o.CHAINS)?o.CHAINS:[];
+  if(o.PVPIS) PVPIS=o.PVPIS; if(o.BEAMS) BEAMS=o.BEAMS; if(o.BENTS) BENTS=o.BENTS; if(o.PILES) PILES=o.PILES; CHAINS=Array.isArray(o.CHAINS)?o.CHAINS:[]; CFOOT=Array.isArray(o.CFOOT)?o.CFOOT:[];
   Object.entries(o.f||{}).forEach(([id,v])=>{ const e=document.getElementById(id); if(e) e.value=v; });
   Object.entries(o.c||{}).forEach(([id,v])=>{ const e=document.getElementById(id); if(e) e.checked=!!v; });
   setStationFormat(g('t_stafmt'), false);
@@ -4442,7 +4621,7 @@ function resetFields(){ FIELDS.forEach(id=>{ const e=document.getElementById(id)
   captureDefaults();
   freshDefaults();
   bindInputs(); bindTabs(); bindButtons(); bind3D(); bindHeat();
-  ['svg_plan','svg_prof','svg_psec','svg_osec','svg_ssec','svg_long','svg_frame','svg_heat','svg_chplan','svg_chprof','svg_chwall'].forEach(id=>{
+  ['svg_plan','svg_prof','svg_psec','svg_osec','svg_ssec','svg_long','svg_frame','svg_heat','svg_chplan','svg_chprof','svg_chwall','svg_cfelev'].forEach(id=>{
     const svg=document.getElementById(id); if(!svg) return;
     attachSvg(id);
   });
