@@ -35,7 +35,15 @@
   .tabpane { display: none; } .tabpane.active { display: block; }
   .cols { display: grid; grid-template-columns: minmax(0, 430px) minmax(0, 1fr); gap: 26px; align-items: start; }
   #pane-track .cols, #pane-plat .cols, #pane-struct .cols { max-width: 1560px; }
-  #pane-chains .cols { grid-template-columns: minmax(0, 600px) minmax(0, 1fr); }
+  /* 3D click-for-details panel, inside the app over the 3D view */
+.pop3 { position:fixed; top:64px; right:18px; width:min(780px, 94vw); max-height:calc(100vh - 90px); overflow:auto; z-index:60;
+        background:var(--paper); border:1px solid var(--ink); box-shadow:0 10px 30px rgba(0,0,0,.25); }
+.pop3[hidden] { display:none; }
+.pop3-head { position:sticky; top:0; display:flex; gap:10px; align-items:center; padding:8px 12px; background:var(--paper); border-bottom:1px solid var(--graphite); z-index:1; }
+.pop3-body { padding:10px 12px 14px; }
+.pop3-body table { width:100%; }
+.pop3-body svg { width:100%; height:auto; border:1px solid rgba(28,26,23,.15); margin-top:8px; }
+#pane-chains .cols { grid-template-columns: minmax(0, 600px) minmax(0, 1fr); }
   #ch_edit .subtbl input, #ch_edit .subtbl select { min-width: 58px; }
   #ch_edit .subtbl td, #ch_edit .subtbl th { padding: 2px 3px; }
   .cols > div { min-width: 0; }
@@ -722,6 +730,11 @@ Open: confirm 10 in casing with geotech."></textarea>
     <div class="cap"><span>3D view</span><span class="note" id="v3d_note"></span>
       <span class="gctrl"><button id="v3d_reset" class="sm ghost">Reset view</button></span></div>
     <svg id="svg_3d" viewBox="0 0 1200 620" style="cursor:grab;"></svg>
+    <div id="pop3" class="pop3" hidden>
+      <div class="pop3-head"><strong id="pop3_title"></strong><span id="pop3_sub" class="note"></span><span style="flex:1"></span>
+        <button class="sm ghost" id="pop3_goto" title="Open where this is edited">Go to inputs</button><button class="sm" onclick="closePop3()" title="Close (Esc)">&times;</button></div>
+      <div id="pop3_body" class="pop3-body"></div>
+    </div>
     <div style="padding:10px 12px; border-top:1px solid var(--graphite);">
       <div class="row4">
         <div><label>Rotation <span class="unit">(&deg;)</span></label><input type="range" id="v3d_az" min="-180" max="180" value="34" step="1"></div>
@@ -2024,6 +2037,7 @@ function draw3D(){
   const fast=CAM.dragging;
   const NS=fast?14:34, NB=NS;
   const faces=[], labels3=[];
+  const tg=(i0,o)=>{ for(let i=i0;i<faces.length;i++) if(!faces[i].o) faces[i].o=o; };   // which component each face belongs to
   const pt3=(s,w,z)=>{ const q=ENG.platPt(s,w,0); return {x:q.x,y:q.y,z}; };
   const span=(n)=>{ const a=[]; for(let i=0;i<=n;i++) a.push(s0+(s1-s0)*i/n); return a; };
   const inWin=(st)=>st>=s0-1e-6 && st<=s1+1e-6;
@@ -2059,21 +2073,24 @@ function draw3D(){
   // The deck is subdivided across its width as well as along it, so each deck
   // panel sits directly over the beam below it and depth sorting stays honest.
   const NW=fast?3:6;
+  const mP=faces.length;
   if(gb('v3d_plat')) sweep(span(NS), s=>{
       const top=[],bot=[];
       for(let i=0;i<=NW;i++){ const wv=C.W*i/NW, z=ENG.surfElev(s,wv);
         top.push({w:wv,z}); bot.unshift({w:wv,z:z-C.panel}); }
       return top.concat(bot);
     }, COL3.plat, true);
+  tg(mP,{t:'plat'});
 
   // ---- beams, as true wide flanges carried through the cantilevers ----
-  if(gb('v3d_beam')) BEAMS.forEach(bm=>{
+  if(gb('v3d_beam')) BEAMS.forEach(bm=>{ const mB=faces.length;
     const S=wf(bm), w=+bm.off, hb=S.bf/24, hw=S.tw/24, tf=S.tf/12, dep=S.d/12;
     sweep(span(NB), s=>{ const top=ENG.surfElev(s,w)-C.panel, bot=top-dep;
       return [{w:w-hb,z:top},{w:w+hb,z:top},{w:w+hb,z:top-tf},{w:w+hw,z:top-tf},
               {w:w+hw,z:bot+tf},{w:w+hb,z:bot+tf},{w:w+hb,z:bot},{w:w-hb,z:bot},
               {w:w-hb,z:bot+tf},{w:w-hw,z:bot+tf},{w:w-hw,z:top-tf},{w:w-hb,z:top-tf}]; },
       COL3.beam, true);
+    tg(mB,{t:'beam',bm});
   });
 
   // ---- tactile warning strip, laid just proud of the deck ----
@@ -2096,7 +2113,7 @@ function draw3D(){
 
   // ---- cap beams, pedestals, piles ----
   const t=Math.max(0.25,C.capT)/2, pileShow=gn('v3d_pile');
-  B.filter(b=>inWin(b.sta)).forEach(b=>{
+  B.filter(b=>inWin(b.sta)).forEach(b=>{ const mS=faces.length;
     if(gb('v3d_cap')){
       sweep([b.sta-t,b.sta+t], ()=>[
         {w:C.capF,z:b.capFront}, {w:C.capF+C.capW,z:b.capBack},
@@ -2127,6 +2144,7 @@ function draw3D(){
       (b.pedPiles||[]).forEach(pl=>{ const zb=b.pcBot-pileShow;
         if(zb<pl.cut-0.05) vprism(pl.pt, pl.dia/2, pl.cut, zb, fast?6:10, COL3.pile); });
     }
+    tg(mS,{t:'bent',b});
   });
 
   // ---- ramps, stairs and their walls ----
@@ -2143,6 +2161,7 @@ function draw3D(){
   if((gb('v3d_ramp')||gb('v3d_rwall')) && CHAINS.length) CHAINS.forEach(ch=>{
     let R; try{ R=computeChain(ch); }catch(e){ return; }
     if(!R || R.sta==null || R.sta<s0-80 || R.sta>s1+80) return;
+    const ci=CHAINS.indexOf(ch); let mC=faces.length;
     if(gb('v3d_ramp')) R.foot.forEach(f=>{
       if(f.z1==null) return;
       const P=f.p, a={x:(P[0].x+P[3].x)/2,y:(P[0].y+P[3].y)/2}, b={x:(P[1].x+P[2].x)/2,y:(P[1].y+P[2].y)/2};
@@ -2157,7 +2176,8 @@ function draw3D(){
       [1,-1].forEach(sd=>{ const o=sd*(wd/2-0.1), px=-uy*o, py=ux*o;
         slab({x:a.x+px,y:a.y+py},{x:b.x+px,y:b.y+py},0.2,f.z1-sk*g.riser,f.z2,f.z1-sk*g.riser-1,f.z2-1,COL3.stair); });
     });
-    if(gb('v3d_rwall')) (R.walls||[]).forEach(wl=>{
+    tg(mC,{t:'chain',ci});
+    if(gb('v3d_rwall')) (R.walls||[]).forEach((wl,wi)=>{ const mW=faces.length;
       const Q=wl.pts, Wd=R.WALL;
       for(let j=0;j<Q.length-1;j++){ const a=Q[j], b=Q[j+1];
         if(Math.abs(b.t-a.t)<1e-4) continue;                     // a step in the top: the end faces show it
@@ -2172,8 +2192,9 @@ function draw3D(){
           const a2= j===0 ? {x:a.x-ux*toe,y:a.y-uy*toe} : a, b2= j===Q.length-2 ? {x:b.x+ux*toe,y:b.y+uy*toe} : b;
           slab(a2,b2,Wd.fw,a.ftgTop,b.ftgTop,a.ftgBot,b.ftgBot,COL3.rftg,'under'); }
       }
+      tg(mW,{t:'wall',ci,wi});
     });
-    if(gb('v3d_col')) (R.pads||[]).filter(pd=>pd.ok&&pd.col).forEach(pd=>{
+    if(gb('v3d_col')) (R.pads||[]).filter(pd=>pd.ok&&pd.col).forEach(pd=>{ const mK=faces.length;
       let ux=pd.pb.x-pd.pa.x, uy=pd.pb.y-pd.pa.y; const m=Math.hypot(ux,uy)||1; ux/=m; uy/=m;
       const sq=(half,zb,zt,col)=>slab({x:pd.x-ux*half,y:pd.y-uy*half},{x:pd.x+ux*half,y:pd.y+uy*half},2*half,zt,zt,zb,zb,col);
       const bp=pd.csz/2+4/12;                                    // plate 8" larger than the column
@@ -2181,13 +2202,14 @@ function draw3D(){
       sq(bp,pd.bobp,pd.tobp,COL3.beam);                          // base plate
       sq(pd.csz/2,pd.tobp,pd.coltop,COL3.col);                   // HSS column
       if(gb('v3d_lab')) labels3.push({p:{x:pd.x,y:pd.y,z:pd.coltop+0.8}, t:pd.name});
+      tg(mK,{t:'pad',ci,pn:pd.name});
     });
     if(gb('v3d_lab') && R.pts.length) labels3.push({p:{x:R.pts[0].x,y:R.pts[0].y,z:R.z0+2.5}, t:ch.name||''});
   });
 
   // ---- columns on spread footings ----
-  CFOOT.forEach(cf=>{ const Rc=computeCF(cf); if(!Rc.ok) return;
-    if(Rc.sta<s0-80||Rc.sta>s1+80) return;
+  CFOOT.forEach((cf,cfi)=>{ const Rc=computeCF(cf); if(!Rc.ok) return;
+    if(Rc.sta<s0-80||Rc.sta>s1+80) return; const mF=faces.length;
     const u=Rc.ua, P=Rc.P;
     const box=(ha,hn,zb,zt,col,lay)=>slab({x:P.x-u.x*ha,y:P.y-u.y*ha},{x:P.x+u.x*ha,y:P.y+u.y*ha},2*hn,zt,zt,zb,zb,col,lay);
     if(gb('v3d_cap')) box(Rc.fL/2,Rc.fW/2,Rc.bof,Rc.tof,COL3.rftg,'under');
@@ -2196,6 +2218,7 @@ function draw3D(){
       box(hb,hb,Rc.topPed,Rc.bobp,COL3.cap,'above'); box(hb,hb,Rc.bobp,Rc.tobp,COL3.beam,'above');
       box(Rc.hss/2,Rc.hss/2,Rc.tobp,Rc.colTop,COL3.col,'above'); }
     if(gb('v3d_lab')) labels3.push({p:{x:P.x,y:P.y,z:Rc.colTop+0.8}, t:cf.name});
+    tg(mF,{t:'cf',i:cfi});
   });
 
   // ---- track ----
@@ -2246,7 +2269,9 @@ function draw3D(){
   faces.sort((a,b)=> a.L!==b.L ? a.L-b.L : b.d-a.d);
   const edges=gb('v3d_edge');
   let out='';
+  OBJ3=[]; const oIdx=new Map();
   for(const f of faces){
+    let di=''; if(f.o){ const key=JSON.stringify(f.o); if(!oIdx.has(key)){ oIdx.set(key,OBJ3.length); OBJ3.push(f.o); } di=` data-o="${oIdx.get(key)}"`; }
     const A=f.p[0],Bp=f.p[1],Cp=f.p[2];
     const ux=Bp.x-A.x, uy=Bp.y-A.y, uz=Bp.z-A.z, vx=Cp.x-A.x, vy=Cp.y-A.y, vz=Cp.z-A.z;
     let nx=uy*vz-uz*vy, ny=uz*vx-ux*vz, nz=ux*vy-uy*vx;
@@ -2254,7 +2279,8 @@ function draw3D(){
     const sh=0.40+0.60*Math.abs(nx*L[0]+ny*L[1]+nz*L[2]);
     const c=f.col.map(v=>Math.round(Math.min(255,v*sh)));
     const op=(f.op==null||f.op>=0.999)?'':` fill-opacity="${f.op.toFixed(2)}"`;
-    out+=`<path d="M${f.q.map(q=>(ox+q.u*k).toFixed(1)+','+(oy-q.v*k).toFixed(1)).join(' L')} Z" fill="rgb(${c[0]},${c[1]},${c[2]})"${op}`+
+    const hl=POP3&&f.o&&JSON.stringify(f.o)===POP3.key;
+    out+=`<path${di} d="M${f.q.map(q=>(ox+q.u*k).toFixed(1)+','+(oy-q.v*k).toFixed(1)).join(' L')} Z" fill="${hl?'rgb('+Math.min(255,c[0]*0.6+110)+','+Math.min(255,c[1]*0.5+60)+','+Math.round(c[2]*0.4)+')':'rgb('+c[0]+','+c[1]+','+c[2]+')'}"${op}`+
          (edges?' stroke="rgba(28,26,23,.35)" stroke-width="0.4"':' shape-rendering="crispEdges"')+'/>';
   }
   labels3.forEach(L=>{ const q=pr(L.p); if(q.d<=0) return;
@@ -2278,8 +2304,14 @@ function bind3D(){
     .forEach(id=>document.getElementById(id).addEventListener('input',draw3D));
   document.getElementById('v3d_reset').onclick=()=>{ CAM.az=34; CAM.el=24; CAM.zoom=1; sync(); draw3D(); };
   let lx=0,ly=0;
-  svg.addEventListener('mousedown',e=>{ CAM.dragging=true; lx=e.clientX; ly=e.clientY; svg.style.cursor='grabbing'; });
-  window.addEventListener('mouseup',()=>{ if(CAM.dragging){ CAM.dragging=false; svg.style.cursor='grab'; draw3D(); } });
+  // a press and release without moving is a click: it picks the component under the cursor
+  let dx0=0, dy0=0, downO=null;
+  svg.addEventListener('mousedown',e=>{ CAM.dragging=true; lx=e.clientX; ly=e.clientY; dx0=e.clientX; dy0=e.clientY;
+    const el=e.target.closest('[data-o]'); downO=el?OBJ3[+el.dataset.o]:null; svg.style.cursor='grabbing'; });
+  svg.addEventListener('mousemove',e=>{ if(CAM.dragging) return; svg.style.cursor=e.target.closest('[data-o]')?'pointer':'grab'; });
+  window.addEventListener('mouseup',e=>{ if(!CAM.dragging) return; CAM.dragging=false; svg.style.cursor='grab';
+    if(Math.hypot(e.clientX-dx0,e.clientY-dy0)<=4){ if(downO) openPop3(downO); else if(POP3) closePop3(); else draw3D(); }
+    else draw3D(); });
   window.addEventListener('mousemove',e=>{ if(!CAM.dragging) return;
     CAM.az=((CAM.az-(e.clientX-lx)*0.4+540)%360)-180;
     CAM.el=Math.max(2,Math.min(85,CAM.el+(e.clientY-ly)*0.3));
@@ -2295,6 +2327,92 @@ function bind3D(){
    The top elevation is read from the platform model at the tie-in, so the
    chain follows whatever the platform does.
    ============================================================ */
+/* ---------- 3D: click a component for its details ----------
+   draw3D tags every face with the component it belongs to (pier, beam, platform, ramp or stair,
+   wall, column on a wall pad, column on a spread footing); a click opens this panel with every
+   elevation and dimension of that component and its own dimensioned drawing. */
+let OBJ3=[], POP3=null;
+function closePop3(){ const el=document.getElementById('pop3'); if(el) el.hidden=true; POP3=null; if(ENG) draw3D(); }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape' && POP3) closePop3(); });
+function openPop3(o){
+  if(!o||!ENG) return;
+  const el=document.getElementById('pop3'), T=document.getElementById('pop3_title'), S=document.getElementById('pop3_sub'), Bd=document.getElementById('pop3_body'), G=document.getElementById('pop3_goto');
+  const C=ENG.C, f3=v=>v==null||!isFinite(v)?'—':(+v).toFixed(3), f2=v=>v==null||!isFinite(v)?'—':(+v).toFixed(2);
+  const tbl=(rows,head)=>`<table class="wide">${head?'<tr>'+head.map((h,i)=>`<th${i?'':' class="lbl"'}>${h}</th>`).join('')+'</tr>':''}${rows.map(r=>'<tr>'+r.map((c,i)=>`<td${i?'':' class="lbl"'}>${c}</td>`).join('')+'</tr>').join('')}</table>`;
+  const kv=rows=>tbl(rows.filter(r=>r&&r[1]!=null&&r[1]!==''));
+  let title='', sub='', h='', draw=null, go=null;
+  const svgBox=(vb)=>`<svg id="svg_pop" viewBox="${vb}"></svg>`;
+  if(o.t==='bent'){
+    const b=ENG.bents().find(x=>x.name===o.b.name)||o.b;
+    title='Pier '+b.name; sub=formatStation(b.sta)+(b.skew?' · skew '+b.skew+'°':'');
+    h+=kv([['Station',formatStation(b.sta)],['Top of platform at edge',f3(b.edgeElev)],['Top of platform at back',f3(b.backElev)],
+      ['Top of rail (near)',b.rails?f3(b.rails.zNear):''],
+      [b.wall?'Top of pier wall (front)':'Top of cap (front)',f3(b.capFront)],[b.wall?'Top of pier wall (back)':'Top of cap (back)',f3(b.capBack)],
+      [b.wall?'Bottom of pier wall':'Bottom of cap',f3(b.botCap)],[b.wall?'Pier wall height':'',b.wall?ftin(b.wallHt):''],
+      ['Top of footing',b.ftTop!=null?f3(b.ftTop):''],['Bottom of footing',b.ftBot!=null?f3(b.ftBot):''],['Footing',b.ftW?ftin(b.ftW)+' × '+ftin(b.ftL):''],
+      ['Bottom of excavation',b.ftExcav!=null?f3(b.ftExcav):''],
+      ['Top of pedestal',C.ped?f3(b.pedTop):''],['Bottom of pedestal',C.ped&&b.pedBot!=null?f3(b.pedBot):''],['Column base (bottom of base plate)',C.ped?f3(b.colBase):''],
+      ['Top of pile cap',b.pcTop!=null?f3(b.pcTop):''],['Bottom of pile cap',b.pcBot!=null?f3(b.pcBot):''],
+      ['Grade',f2(b.grade)+(b.gradeOwn?'':' (default)')],['Exposure above grade',b.exposure!=null?ftin(b.exposure):'']]);
+    if(b.rows&&b.rows.length) h+=`<h2 class="sec mt">Beam seats</h2>`+tbl(b.rows.map(r=>[esc(r.lab),ftin(r.off)+' from edge',f3(r.tob!=null?r.tob:r.topBeam),f3(r.bob!=null?r.bob:r.botBeam),r.plate!=null?(r.plate*12).toFixed(3)+'"':(r.mp!=null?(r.mp*12).toFixed(3)+'"':'—')]),['Beam','Offset','Top of beam','Bottom of beam','Masonry plate']);
+    h+=svgBox('0 0 1100 640'); draw=()=>drawSection('svg_pop', b.sta, true, b);
+    go=()=>{ closePop3(); document.querySelector('.tabbtn[data-tab="sup"]')?.click(); };
+  } else if(o.t==='beam'){
+    const bm=o.bm; title='Beam '+esc(bm.lab||''); sub=ftin(+bm.off)+' from the platform edge';
+    const S=wf(bm);
+    h+=kv([['Section',esc(bm.shape||S.name||'custom')],['Depth',(S.d).toFixed(2)+' in'],['Flange',(S.bf).toFixed(2)+' × '+(S.tf).toFixed(3)+' in'],['Web',(S.tw).toFixed(3)+' in'],['Offset from edge',ftin(+bm.off)]]);
+    const rows=ENG.bents().map(b=>{ const r=(b.rows||[]).find(x=>x.lab===bm.lab); if(!r) return null;
+      const tob=ENG.surfElev(b.sta,+bm.off)-C.panel; return [b.name,formatStation(b.sta),f3(tob),f3(tob-S.d/12),r.mp!=null?(r.mp*12).toFixed(3)+'"':(r.plate!=null?(r.plate*12).toFixed(3)+'"':'—')]; }).filter(Boolean);
+    h+=`<h2 class="sec mt">At each support</h2>`+tbl(rows,['Support','Station','Top of beam','Bottom of beam','Masonry plate']);
+  } else if(o.t==='plat'){
+    title='Platform'; sub=formatStation(C.sta0)+' to '+formatStation(C.sta1);
+    const zs=[]; for(let i=0;i<=40;i++){ const st=C.sta0+(C.sta1-C.sta0)*i/40; zs.push(ENG.edgeElev(st),ENG.surfElev(st,C.W)); }
+    h+=kv([['Limits',formatStation(C.sta0)+' to '+formatStation(C.sta1)],['Length',ftin(Math.abs(C.sta1-C.sta0))],['Width',ftin(C.W)],['Panel',(C.panel*12).toFixed(2)+'"'],
+      ['Top of platform, edge (begin / end)',f3(ENG.edgeElev(C.sta0))+' / '+f3(ENG.edgeElev(C.sta1))],['Top of platform, back (begin / end)',f3(ENG.surfElev(C.sta0,C.W))+' / '+f3(ENG.surfElev(C.sta1,C.W))],
+      ['Highest / lowest',f3(Math.max(...zs))+' / '+f3(Math.min(...zs))]]);
+    const st=(C.sta0+C.sta1)/2; h+=svgBox('0 0 1100 640'); draw=()=>drawSection('svg_pop', st, true, null);
+  } else if(o.t==='chain'||o.t==='wall'||o.t==='pad'){
+    const ch=CHAINS[o.ci]; if(!ch) return; const R=computeChain(ch);
+    if(o.t==='chain'){
+      title=esc(ch.name); sub=(R.isStair?'stair':'ramp')+' · '+formatStation(R.sta);
+      h+=kv([['Top (at the platform)',f3(R.z0)],['Bottom',R.bottom?f3(R.bottom.z):''],['Clear width',ftin(R.W)],['Low grade',R.low!=null?f2(R.low)+' ('+esc(R.lowSrc)+')':''],
+        ['Bottom of footing',R.WALL.bofFix!=null?f3(R.WALL.bofFix):'follows grade']]);
+      h+=`<h2 class="sec mt">Segments</h2>`+tbl(R.segs.filter(g=>g.k!=='turn').map(g=>[esc(g.label||g.k),f3(g.z1),f3(g.z2),g.L!=null?ftin(g.L):'',g.k==='stair'?g.n+' risers @ '+(g.riser*12).toFixed(2)+'"':(g.ratio?'1:'+(+g.ratio).toFixed(2):'')]),['Segment','Top','Bottom','Length','Slope / risers']);
+      h+=svgBox('0 0 1100 360'); draw=()=>{ CHAIN_SEL=o.ci; drawChainProfile(); const src=document.getElementById('svg_chprof'), d=document.getElementById('svg_pop'); d.setAttribute('viewBox',src.getAttribute('viewBox')); d.innerHTML=src.innerHTML; };
+    } else if(o.t==='wall'){
+      const wl=R.walls[o.wi]; if(!wl) return;
+      title=esc(ch.name)+' · '+wl.name; sub=esc(wl.desc);
+      const T=wl.pts.map(q=>q.top), Bf=wl.pts.map(q=>q.ftgBot).filter(v=>v!=null);
+      h+=kv([['Length',ftin(wl.len)],['Wall',ftin(R.WALL.t)+' thick'],['Footing',ftin(R.WALL.fw)+' × '+ftin(R.WALL.ft)+' (runs '+ftin((R.WALL.fw-R.WALL.t)/2)+' past each end)'],
+        ['Top of wall, high / low',f3(Math.max(...T))+' / '+f3(Math.min(...T))],['Bottom of footing',Bf.length?f3(Math.max(...Bf))+(Math.max(...Bf)-Math.min(...Bf)>1e-4?' to '+f3(Math.min(...Bf)):' (level)'):'']]);
+      h+=`<h2 class="sec mt">At each end and break</h2>`+tbl(wl.pts.map(q=>[esc(q.where),(q.t-wl.pts[0].t).toFixed(2),f3(q.top),f2(q.grade),f3(q.ftgTop),f3(q.ftgBot),q.height!=null?ftin(q.height):'—',q.exposed!=null?ftin(q.exposed):'—']),['Point','Along (ft)','Top of wall','Grade','TOF','BOF','Height','Exposed']);
+      h+=svgBox('0 0 1500 560'); draw=()=>{ CHAIN_SEL=o.ci; WALL_SEL=o.wi; drawWallElev('svg_pop'); };
+    } else {
+      const pd=(R.pads||[]).find(x=>x.name===o.pn); if(!pd) return;
+      title='Column '+esc(pd.name); sub='on '+pd.wall+' of '+esc(ch.name);
+      h+=kv([['Station',formatStation(pd.sta)],['Behind back edge',ftin(pd.off)],['Northing / Easting',pd.y.toFixed(3)+' / '+pd.x.toFixed(3)],['Column','HSS '+(pd.csz*12).toFixed(0)+'×'+(pd.csz*12).toFixed(0)],
+        ['Top of pad (concrete)',f3(pd.top)],['Pad length',ftin(pd.len)],['Grout',(pd.grout*12).toFixed(2)+'"'],['Bottom of base plate',f3(pd.bobp)],['Base plate',(pd.bplate*12).toFixed(2)+'"'],['Top of base plate',f3(pd.tobp)]]);
+      const wi=R.walls.findIndex(w=>w.name===pd.wall);
+      h+=svgBox('0 0 1500 560'); draw=()=>{ CHAIN_SEL=o.ci; WALL_SEL=Math.max(0,wi); drawWallElev('svg_pop'); };
+    }
+    go=()=>{ CHAIN_SEL=o.ci; if(o.t==='wall') WALL_SEL=o.wi; closePop3(); document.querySelector('.tabbtn[data-tab="chains"]')?.click(); refreshAll(); };
+  } else if(o.t==='cf'){
+    const cf=CFOOT[o.i]; if(!cf) return; const Rc=computeCF(cf);
+    title='Column '+esc(cf.name); sub='on a spread footing · '+formatStation(Rc.sta);
+    h+=kv([['Station',formatStation(Rc.sta)],['Behind back edge',ftin(Rc.off)],['Northing / Easting',Rc.P.y.toFixed(3)+' / '+Rc.P.x.toFixed(3)],['Column','HSS '+(Rc.hss*12).toFixed(0)+'×'+(Rc.hss*12).toFixed(0)],
+      ['Grade',f2(Rc.grade)+' ('+esc(Rc.gsrc)+')'],['Top of pedestal',f3(Rc.topPed)],['Bottom of base plate',f3(Rc.bobp)],['Top of base plate',f3(Rc.tobp)],['Top of footing',f3(Rc.tof)],['Bottom of footing',f3(Rc.bof)],
+      ['Pedestal',ftin(Rc.ped)+' square × '+ftin(Rc.pedH)+' high'],['Footing',ftin(Rc.fL)+' × '+ftin(Rc.fW)+' × '+ftin(Rc.fT)],['Cover over footing',ftin(Rc.cover)],['Checks',Rc.checks.length?Rc.checks.join('; '):'OK']]);
+    h+=svgBox('0 0 1500 560'); draw=()=>{ CF_SEL=o.i; drawCFElev('svg_pop'); };
+    go=()=>{ CF_SEL=o.i; closePop3(); document.querySelector('.tabbtn[data-tab="chains"]')?.click(); refreshAll(); };
+  }
+  T.innerHTML=title; S.textContent=' '+sub; Bd.innerHTML=h;
+  POP3={o, key:JSON.stringify(o)};
+  REDRAW['svg_pop']=draw||(()=>{});
+  try{ if(draw) draw(); }catch(e){ console.error(e); }
+  G.style.display=go?'':'none'; G.onclick=go||null;
+  el.hidden=false; draw3D();
+}
+
 let CHAIN_SEL=0;
 const CHAIN_LIM={ rampMax:12, riseMax:2.5, landMin:5, widthMin:3, riserMax:7/12, riserMin:4/12, treadMin:11/12 };
 
@@ -2965,8 +3083,8 @@ function renderChainResults(){
 }
 let WALL_SEL=0;
 function wallPick(j){ WALL_SEL=j; drawWallElev(); renderWallTable(); }
-function drawWallElev(){
-  const svg=document.getElementById('svg_chwall'), pick=document.getElementById('ch_wallpick');
+function drawWallElev(target){
+  const TID=target||'svg_chwall', svg=document.getElementById(TID), pick=target?null:document.getElementById('ch_wallpick');
   if(!svg||!ENG) return;
   const R=CHAINS.length?computeChain(CHAINS[Math.min(CHAIN_SEL,CHAINS.length-1)]):null;
   if(!R||!R.walls||!R.walls.length){ svg.innerHTML=''; if(pick) pick.innerHTML='<span class="note">No walls on this one.</span>'; return; }
@@ -3148,7 +3266,7 @@ function drawWallElev(){
   [['var(--oxide)','3 3',stw?'top of platform':'walking surface'],['var(--good)','8 3','grade'],['var(--cyan)','5 3','intersecting wall, in front or behind']].forEach((kk,j)=>{ const xx=16+j*150, yy=40;
     s+=`<line x1="${xx}" y1="${yy-3}" x2="${xx+26}" y2="${yy-3}" stroke="${kk[0]}" stroke-width="1.2" stroke-dasharray="${kk[1]}"/>`+
        `<text x="${xx+32}" y="${yy}" font-size="8.5" font-family="monospace" fill="var(--ink-soft)">${kk[2]}</text>`; });
-  svg.innerHTML=svgWrap('svg_chwall',s,W,H);
+  svg.innerHTML=svgWrap(TID,s,W,H);
 }
 function renderWallTable(){
   const box=document.getElementById('ch_walls'); if(!box||!ENG) return;
@@ -3244,8 +3362,8 @@ function renderCF(){
   tb.innerHTML=t;
   drawCFElev();
 }
-function drawCFElev(){
-  const svg=document.getElementById('svg_cfelev'); if(!svg||!ENG) return;
+function drawCFElev(target){
+  const TID=target||'svg_cfelev', svg=document.getElementById(TID); if(!svg||!ENG) return;
   if(!CFOOT.length){ svg.innerHTML=''; return; }
   if(CF_SEL>=CFOOT.length) CF_SEL=0;
   const R=computeCF(CFOOT[CF_SEL]); if(!R.ok){ svg.innerHTML=''; return; }
@@ -3322,7 +3440,7 @@ function drawCFElev(){
   s+=`<text x="16" y="22" font-size="11" font-family="monospace" fill="var(--ink)" font-weight="bold">${esc(R.cf.name)}</text>`+
      `<text x="${24+String(R.cf.name||'').length*7.2}" y="22" font-size="9" font-family="monospace" fill="var(--ink-soft)">${formatStation(R.sta)} · ${fi(R.off)} behind back edge · N ${R.P.y.toFixed(2)} E ${R.P.x.toFixed(2)} · grade ${R.grade.toFixed(2)} (${esc(R.gsrc)}) · ${fi(R.grout)} grout · ${fi(R.bp)} base plate · true scale</text>`;
   s+=`<line x1="16" y1="37" x2="42" y2="37" stroke="var(--good)" stroke-width="1.3" stroke-dasharray="8 3"/><text x="48" y="40" font-size="8.5" font-family="monospace" fill="var(--ink-soft)">grade</text>`;
-  svg.innerHTML=svgWrap('svg_cfelev',s,W,H);
+  svg.innerHTML=svgWrap(TID,s,W,H);
 }
 function renderChains(){ renderChainUI(); drawChainPlan(); drawChainProfile(); drawWallElev(); renderWallTable(); renderChainResults(); renderCF(); }
 
