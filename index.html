@@ -579,7 +579,7 @@
 <!-- ============ TAB 5: SUPPORT OUTPUT ============ -->
 <section class="tabpane" id="pane-sup" role="tabpanel">
   <h2 class="sec">Framing plan</h2>
-  <p class="note" style="margin-bottom:12px;">Platform, cap beams, beam lines and micropiles at true scale in plan. Scroll to zoom, drag to pan.</p>
+  <p class="note" style="margin-bottom:12px;">Platform, cap beams or pier walls with their footings, beam lines and micropiles, plus the ramps and stairs (walls on dashed footings, column pads in red, columns in black) and the columns on spread footings, at true scale in plan. Scroll to zoom, drag to pan.</p>
   <div class="svgcard">
     <div class="cap"><span>Structure under the platform</span><span class="note" id="frame_note"></span>
       <span class="gctrl"><button data-sz="svg_frame" data-a="in">+</button><button data-sz="svg_frame" data-a="out">&minus;</button><button data-sz="svg_frame" data-a="fit">Fit</button></span></div>
@@ -2375,8 +2375,19 @@ function drawFramePlan(){
   let mnx=Infinity,mxx=-Infinity,mny=Infinity,mxy=-Infinity;
   const grow=p=>{ mnx=Math.min(mnx,p.x); mxx=Math.max(mxx,p.x); mny=Math.min(mny,p.y); mxy=Math.max(mxy,p.y); };
   edge.forEach(grow); back.forEach(grow); rN.forEach(grow); rF.forEach(grow); caps.forEach(q=>q.forEach(grow));
+  // ramps, stairs and their walls, column pads, and the columns on spread footings
+  const RSF=[]; CHAINS.forEach((ch,ci)=>{ try{ RSF.push({ci,R:computeChain(ch)}); }catch(e){} });
+  const CFF=CFOOT.map((cf,i)=>({i,R:computeCF(cf)})).filter(o=>o.R&&o.R.P);
+  const ofs=(p,n,d)=>({x:p.x+n.x*d,y:p.y+n.y*d});
+  const wallQuads=(wl,W2)=>{ const A=wl.pts[0], Z=wl.pts[wl.pts.length-1], L=Math.hypot(Z.x-A.x,Z.y-A.y)||1, u={x:(Z.x-A.x)/L,y:(Z.y-A.y)/L}, n={x:-u.y,y:u.x};
+    const t=W2.t/2, f=W2.fw/2, e=(W2.fw-W2.t)/2;
+    return { wall:[ofs(A,n,t),ofs(Z,n,t),ofs(Z,n,-t),ofs(A,n,-t)].map(RT),
+             ftg:[ofs(ofs(A,u,-e),n,f),ofs(ofs(Z,u,e),n,f),ofs(ofs(Z,u,e),n,-f),ofs(ofs(A,u,-e),n,-f)].map(RT) }; };
+  const cfQuad=(R,a,b,c)=>{ const P=R.P, ua=R.ua, un=R.un; return [[-a,-b],[a,-b],[a,b],[-a,b]].map(([x,y])=>RT({x:P.x+ua.x*x+un.x*y+(c||0), y:P.y+ua.y*x+un.y*y})); };
+  RSF.forEach(({R})=>{ R.foot.forEach(f=>f.p.forEach(q=>grow(RT(q)))); R.walls.forEach(wl=>wallQuads(wl,R.WALL).ftg.forEach(grow)); });
+  CFF.forEach(({R})=>{ if(R.ok) cfQuad(R,R.fL/2,R.fW/2).forEach(grow); else grow(RT(R.P)); });
   const dx=Math.max(mxx-mnx,1), dy=Math.max(mxy-mny,1);
-  const k=(W-2*pad)/dx;                                  // fit the length; scale stays uniform
+  const k=Math.min((W-2*pad)/dx,(460-2*pad-30)/dy);     // fit the length (or the depth, with ramps far behind); scale stays uniform
   // size the card to the structure rather than leaving a band of empty paper,
   // keeping enough margin that zooming in still has somewhere to go
   const H=Math.max(150,Math.min(460, Math.round(dy*k)+2*pad+30));
@@ -2415,14 +2426,34 @@ function drawFramePlan(){
     const p=RT(pl.pt), r=Math.max(1.2,(pl.dia/2)*k);
     s+=`<circle cx="${TX(p.x).toFixed(1)}" cy="${TY(p.y).toFixed(1)}" r="${r.toFixed(1)}" fill="var(--oxide)" stroke="var(--ink)" stroke-width="0.6"/>`;
   }));
+  // ramps and stairs: footprint, walls on dashed footings, column pads and columns
+  RSF.forEach(({R})=>{
+    R.walls.forEach(wl=>{ const q=wallQuads(wl,R.WALL); s+=`<path d="M${poly(q.ftg)} Z" fill="rgba(28,26,23,.08)" stroke="var(--ink)" stroke-width="0.8" stroke-dasharray="4 2"/>`; });
+    R.foot.forEach(f=>{ if(f.kind==='turnmark') return;
+      s+=`<path d="M${poly(f.p.map(RT))} Z" fill="${f.kind==='stair'?'rgba(96,110,128,.22)':'rgba(139,133,118,.20)'}" stroke="var(--ink-soft)" stroke-width="0.7"/>`;
+      if(f.kind==='stair'){ const [a,b,c,d]=f.p, n=8; for(let i=1;i<n;i++){ const t2=i/n; s+=line([RT({x:a.x+(b.x-a.x)*t2,y:a.y+(b.y-a.y)*t2}),RT({x:d.x+(c.x-d.x)*t2,y:d.y+(c.y-d.y)*t2})],'var(--ink-soft)',0.4); } } });
+    R.walls.forEach(wl=>{ const q=wallQuads(wl,R.WALL); s+=`<path d="M${poly(q.wall)} Z" fill="rgba(28,26,23,.30)" stroke="var(--ink)" stroke-width="0.9"/>`; });
+    (R.pads||[]).filter(pd=>pd.ok).forEach(pd=>{
+      const A=pd.pa, Z=pd.pb, L=Math.hypot(Z.x-A.x,Z.y-A.y)||1, n={x:-(Z.y-A.y)/L,y:(Z.x-A.x)/L}, t=R.WALL.t/2;
+      s+=`<path d="M${poly([ofs(A,n,t),ofs(Z,n,t),ofs(Z,n,-t),ofs(A,n,-t)].map(RT))} Z" fill="var(--oxide)" fill-opacity="0.45" stroke="var(--oxide)" stroke-width="0.8"/>`;
+      if(pd.col){ const c=RT({x:pd.x,y:pd.y}), h=Math.max(1.5,pd.csz/2*k); s+=`<rect x="${(TX(c.x)-h).toFixed(1)}" y="${(TY(c.y)-h).toFixed(1)}" width="${(2*h).toFixed(1)}" height="${(2*h).toFixed(1)}" fill="var(--ink)"/>`;
+        s+=`<text x="${TX(c.x).toFixed(1)}" y="${(TY(c.y)-h-3).toFixed(1)}" font-size="7.5" font-family="monospace" fill="var(--ink)" text-anchor="middle" paint-order="stroke" stroke="var(--paper)" stroke-width="2">${esc(pd.name)}</text>`; } });
+    const lp=RT(R.pts[Math.floor(R.pts.length/2)]); s+=`<text x="${TX(lp.x).toFixed(1)}" y="${(TY(lp.y)+3).toFixed(1)}" font-size="8.5" font-family="monospace" fill="var(--ink)" text-anchor="middle" font-weight="bold" paint-order="stroke" stroke="var(--paper)" stroke-width="2.4">${esc(R.ch.name||'')}</text>`;
+  });
+  // columns on spread footings: footing (dashed), pedestal and column
+  CFF.forEach(({R})=>{ if(!R.ok) return;
+    s+=`<path d="M${poly(cfQuad(R,R.fL/2,R.fW/2))} Z" fill="rgba(28,26,23,.10)" stroke="var(--ink)" stroke-width="0.8" stroke-dasharray="4 2"/>`;
+    s+=`<path d="M${poly(cfQuad(R,R.ped/2,R.ped/2))} Z" fill="rgba(28,26,23,.30)" stroke="var(--ink)" stroke-width="0.9"/>`;
+    const c=RT(R.P), h=Math.max(1.5,R.hss/2*k); s+=`<rect x="${(TX(c.x)-h).toFixed(1)}" y="${(TY(c.y)-h).toFixed(1)}" width="${(2*h).toFixed(1)}" height="${(2*h).toFixed(1)}" fill="var(--ink)"/>`;
+    const lp=cfQuad(R,0,R.fW/2+1)[2]; s+=`<text x="${TX(c.x).toFixed(1)}" y="${(Math.min(...cfQuad(R,R.fL/2,R.fW/2).map(q=>TY(q.y)))-4).toFixed(1)}" font-size="7.5" font-family="monospace" fill="var(--ink)" text-anchor="middle" paint-order="stroke" stroke="var(--paper)" stroke-width="2">${esc(R.cf.name||'')}</text>`; });
   // track
   s+=line(rN,'var(--rail)',1.3)+line(rF,'var(--rail)',1.3);
   s+=line(cl,'var(--ink)',0.9,'10 4 2 4');
   // platform outline on top
   s+=line(edge,'var(--oxide)',2)+line(back,'var(--cyan)',1.3);
   // support labels
-  B.forEach((b,i)=>{ const far=Math.max(C.W, b.ftB!=null?b.ftB:0, C.ped&&b.pedOff!=null?b.pedOff+Math.max(C.pedW,b.pcTop!=null?C.pcW:0)/2:0);   // clear of the footing and pedestal
-    const p=RT(ENG.platPt(b.sta,far+2.5,b.skew));
+  B.forEach((b,i)=>{   // on the track side, past the far rail, clear of the ramps and stairs behind the platform
+    const near=Math.min(0, b.ftA!=null?b.ftA:0), p=RT(ENG.platPt(b.sta,Math.min(near,-ENG.edgeOff(b.sta)-C.gauge/2)-3.5,b.skew));
     s+=`<text x="${TX(p.x).toFixed(1)}" y="${TY(p.y).toFixed(1)}" font-size="8" font-family="monospace" fill="var(--ink-soft)" text-anchor="middle">${esc(b.name)}</text>`; });
   if(B.length){
     const wFar=Math.max(C.W,...B.map(b=>Math.max(b.ftB!=null?b.ftB:0, C.ped&&b.pedOff!=null?b.pedOff+Math.max(C.pedW,b.pcTop!=null?C.pcW:0)/2:0)))+7;   // past the pier labels
@@ -2435,7 +2466,7 @@ function drawFramePlan(){
     mark(s0,B[0],'cant '+(B[0].sta-s0).toFixed(2)+"'");
     mark(s1,B[B.length-1],'cant '+(s1-B[B.length-1].sta).toFixed(2)+"'");
   }
-  if(BEAMS.length && B.length>1) BEAMS.forEach(bm=>{ const p=RT(ENG.platPt(B[0].sta-8,+bm.off,0));
+  if(BEAMS.length && B.length>1) BEAMS.forEach(bm=>{ const p=RT(ENG.platPt(Math.max(s1,B[B.length-1].sta)+3,+bm.off,0));
     s+=`<text x="${TX(p.x).toFixed(1)}" y="${(TY(p.y)+3).toFixed(1)}" font-size="8" font-family="monospace" fill="var(--ink)" text-anchor="middle">${esc(bm.lab)}</text>`; });
   svg.innerHTML=svgWrap(id,s,W,H);
   const n=document.getElementById('frame_note');
