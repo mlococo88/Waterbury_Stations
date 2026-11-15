@@ -2081,6 +2081,7 @@ function draw3D(){
     const far=Math.max(C.W, back, C.ped?(ENG.pedOffAt((s0+s1)/2)+Math.max(C.pedW,C.pcW)/2):0)+6;
     sweep(span(NS), st=>{ const g0=gradeAt(st), near=-(C.gauge/2+8)-ENG.edgeOff(st);
       return [{w:near,z:g0},{w:far,z:g0},{w:far,z:g0-0.6},{w:near,z:g0-0.6}]; }, COL3.ground, true, gn('v3d_gop')/100);
+    faces.forEach(f=>{ if(f.col===COL3.ground) f.ground=true; });
   }
 
   // ---- cap beams, pedestals, piles ----
@@ -2121,13 +2122,13 @@ function draw3D(){
   // ---- ramps, stairs and their walls ----
   // A box between two plan points, of a given width, whose top and bottom can vary
   // linearly from one end to the other.
-  function slab(a,b,wd,zt1,zt2,zb1,zb2,col){
+  function slab(a,b,wd,zt1,zt2,zb1,zb2,col,lay){
     let ux=b.x-a.x, uy=b.y-a.y; const m=Math.hypot(ux,uy); if(m<1e-6) return; ux/=m; uy/=m;
     const nx=-uy*wd/2, ny=ux*wd/2;
     const T=[{x:a.x+nx,y:a.y+ny,z:zt1},{x:b.x+nx,y:b.y+ny,z:zt2},{x:b.x-nx,y:b.y-ny,z:zt2},{x:a.x-nx,y:a.y-ny,z:zt1}];
     const Bt=[{x:a.x+nx,y:a.y+ny,z:zb1},{x:b.x+nx,y:b.y+ny,z:zb2},{x:b.x-nx,y:b.y-ny,z:zb2},{x:a.x-nx,y:a.y-ny,z:zb1}];
-    faces.push({p:T,col});
-    for(let i=0;i<4;i++){ const j=(i+1)%4; faces.push({p:[T[i],T[j],Bt[j],Bt[i]],col}); }
+    faces.push({p:T,col,lay});
+    for(let i=0;i<4;i++){ const j=(i+1)%4; faces.push({p:[T[i],T[j],Bt[j],Bt[i]],col,lay}); }
   }
   if((gb('v3d_ramp')||gb('v3d_rwall')) && CHAINS.length) CHAINS.forEach(ch=>{
     let R; try{ R=computeChain(ch); }catch(e){ return; }
@@ -2151,12 +2152,15 @@ function draw3D(){
       for(let j=0;j<Q.length-1;j++){ const a=Q[j], b=Q[j+1];
         if(Math.abs(b.t-a.t)<1e-4) continue;                     // a step in the top: the end faces show it
         const fa=a.ftgTop!=null?a.ftgTop:a.top-3, fb=b.ftgTop!=null?b.ftgTop:b.top-3;
-        slab(a,b,Wd.t,a.top,b.top,fa,fb,COL3.rwall);
+        if(a.grade!=null && b.grade!=null && a.grade>fa && b.grade>fb && a.grade<a.top && b.grade<b.top){
+          slab(a,b,Wd.t,a.grade,b.grade,fa,fb,COL3.rwall,'under');          // below grade
+          slab(a,b,Wd.t,a.top,b.top,a.grade,b.grade,COL3.rwall,'above');    // above grade
+        } else slab(a,b,Wd.t,a.top,b.top,fa,fb,COL3.rwall);
         if(a.ftgBot!=null&&b.ftgBot!=null){
           // footings run a toe past each end of the wall, closing the corners
           const toe=Math.max(0,(Wd.fw-Wd.t)/2), L0=Math.hypot(b.x-a.x,b.y-a.y), ux=(b.x-a.x)/L0, uy=(b.y-a.y)/L0;
           const a2= j===0 ? {x:a.x-ux*toe,y:a.y-uy*toe} : a, b2= j===Q.length-2 ? {x:b.x+ux*toe,y:b.y+uy*toe} : b;
-          slab(a2,b2,Wd.fw,a.ftgTop,b.ftgTop,a.ftgBot,b.ftgBot,COL3.rftg); }
+          slab(a2,b2,Wd.fw,a.ftgTop,b.ftgTop,a.ftgBot,b.ftgBot,COL3.rftg,'under'); }
       }
     });
     if(gb('v3d_col')) (R.pads||[]).filter(pd=>pd.ok&&pd.col).forEach(pd=>{
@@ -2204,7 +2208,19 @@ function draw3D(){
 
   // ---- shade and paint back to front ----
   const L=(()=>{ const v=[0.38,-0.52,0.77], m=Math.hypot(...v); return v.map(x=>x/m); })();
-  faces.sort((a,b)=>b.d-a.d);
+  // Paint in three layers so the semi-transparent ground reads correctly: everything
+  // wholly below grade first, then the ground together with anything that crosses it
+  // (depth-sorted as before), then everything wholly above grade.
+  const gz=gpts.map(q=>q.g), gLo=gz.length?Math.min(...gz):-Infinity, gHi=gz.length?Math.max(...gz):-Infinity;
+  const showG=gb('v3d_grnd') && gz.length;
+  faces.forEach(f=>{
+    if(!showG){ f.L=1; return; }
+    if(f.ground){ f.L=1; return; }
+    if(f.lay==='under'){ f.L=0; return; }
+    if(f.lay==='above'){ f.L=2; return; }
+    const zs=f.p.map(q=>q.z), zmax=Math.max(...zs), zmin=Math.min(...zs);
+    f.L = zmax<=gLo+1e-3 ? 0 : (zmin>=gHi-1e-3 ? 2 : 1); });
+  faces.sort((a,b)=> a.L!==b.L ? a.L-b.L : b.d-a.d);
   const edges=gb('v3d_edge');
   let out='';
   for(const f of faces){
@@ -2460,6 +2476,25 @@ function computeChain(ch){
   const gTop = gTopRaw!=='' ? parseFloat(gTopRaw) : (C.grade0!=null ? C.grade0 : grade);
   const gBot = (grade!=null && isFinite(grade)) ? grade : gTop;
   let gradeAt=d=> (gTop==null||gBot==null) ? null : gTop+(gBot-gTop)*(dist>0?d/dist:0);
+  // Low grade, which sets the bottom of footing: as entered, or else the lowest grade
+  // entered at the piers next to the ramp or stair (those within its station range plus
+  // the nearest one beyond each end), or else the default grade.
+  let low=null, lowSrc='';
+  { const lg=String(ch.lowGrade==null?'':ch.lowGrade).trim();
+    if(lg!=='' && isFinite(parseFloat(lg))){ low=parseFloat(lg); lowSrc='entered'; }
+    else {
+      const P0=ENG.platPt(s,C.W,0), Pa=ENG.platPt(s+1,C.W,0), tx=Pa.x-P0.x, ty=Pa.y-P0.y;
+      const ss=[]; foot.forEach(f=>f.p.forEach(q=>ss.push(s+(q.x-P0.x)*tx+(q.y-P0.y)*ty))); if(!ss.length) ss.push(s);
+      const sa=Math.min(...ss), sb=Math.max(...ss);
+      let Bs=[]; try{ Bs=ENG.bents().slice().sort((a,b)=>a.sta-b.sta); }catch(e){}
+      const near=Bs.filter(b=>b.sta>=sa-1e-6&&b.sta<=sb+1e-6);
+      const below=Bs.filter(b=>b.sta<sa).pop(), above=Bs.find(b=>b.sta>sb);
+      if(below) near.unshift(below); if(above) near.push(above);
+      const own=near.filter(b=>b.gradeOwn && b.grade!=null);
+      if(own.length){ const m=own.reduce((a,b)=>b.grade<a.grade?b:a); low=m.grade; lowSrc='lowest entered at '+own.map(b=>b.name).join(', ')+' ('+m.name+')'; }
+      else if(C.grade0!=null && isFinite(C.grade0)){ low=C.grade0; lowSrc='no grades entered at '+(near.map(b=>b.name).join(', ')||'the nearby piers')+'; default grade'; }
+      else if(grade!=null){ low=grade; lowSrc='bottom grade'; }
+    } }
   const isStair = (ch.segs||[]).some(g=>g.k==='stair') && !(ch.segs||[]).some(g=>g.k==='run');
   let stairWall=null;
   if(isStair){
@@ -2467,7 +2502,7 @@ function computeChain(ch){
     // that carries the stair; top set down from the platform by the FRP / bearing stack.
     pieces.length=0;
     const gw = String(ch.wallGrade==null?'':ch.wallGrade).trim()===''
-      ? (grade!=null&&isFinite(grade)?grade:C.grade0) : parseFloat(ch.wallGrade);
+      ? (low!=null?low:(grade!=null&&isFinite(grade)?grade:C.grade0)) : parseFloat(ch.wallGrade);
     gradeAt=()=>gw;
     if(WALL.on){
       const h0=heading0, n0=nrm(h0);
@@ -2479,11 +2514,12 @@ function computeChain(ch){
       stairWall={top, below, len, off, grade:gw};
     }
   }
+  if(isStair) WALL.level=true;                     // one stair support wall: one footing level
   if(WALL.level){
-    // one level footing: a set elevation, or frost depth below the lowest grade along the walls
+    // one level footing: a set elevation, or frost depth below the low grade
     const fx=String(ch.ftgBot==null?'':ch.ftgBot).trim();
     const gl=[gTop,gBot].filter(v=>v!=null&&isFinite(v));
-    WALL.bofFix = fx!=='' ? parseFloat(fx) : (isStair? (gradeAt(0)!=null?gradeAt(0)-WALL.frost:null) : (gl.length?Math.min(...gl)-WALL.frost:null));
+    WALL.bofFix = fx!=='' ? parseFloat(fx) : (low!=null ? low-WALL.frost : (gl.length?Math.min(...gl)-WALL.frost:null));
   }
   const walls=mergeWalls(pieces, pts[0], gradeAt, WALL);
   if(isStair) walls.forEach(wl=>{ wl.kind='stair'; wl.desc='Stair support wall at the top of the stair'; });
@@ -2502,7 +2538,7 @@ function computeChain(ch){
     checks.push({seg:-1, name:'Meets grade', ok:Math.abs(miss)<=0.5/12,
       msg:`bottom ${bottom.z.toFixed(3)} against grade ${grade.toFixed(2)} — ${miss>=0?'ends ':'ends '}${(Math.abs(miss)*12).toFixed(2)}" ${miss>=0?'above':'below'} grade`}); }
   return {ch, z0, pts, path, foot, checks, segs:segOut, grade, miss, bottom, heading0, along, W, sta:s, anchor,
-          walls, WALL, gTop, gBot, isStair, stairWall, pads:padsOut};
+          walls, WALL, gTop, gBot, isStair, stairWall, pads:padsOut, low, lowSrc};
 }
 // Level bearing pads where columns land on a wall. A pad is located by the column's
 // station and its distance back from the platform back edge, and takes the wall whose
@@ -2661,6 +2697,10 @@ function renderChainUI(){
   <fieldset style="margin-top:10px;"><legend>walls</legend>
     <p class="cfg" style="margin-top:0;"><input type="checkbox" id="ch_walls_${i}" ${c.walls!==false?'checked':''} onchange="chainSet(${i},'walls',this.checked)"> <label for="ch_walls_${i}" style="margin:0;display:inline;">${R.isStair?'Stair support wall across the top of the stair, on a strip footing':'Walls along both sides, on strip footings'}</label>
     ${R.isStair?'':`&nbsp; <input type="checkbox" id="ch_bw_${i}" ${c.botWall!==false?'checked':''} onchange="chainSet(${i},'botWall',this.checked)"> <label for="ch_bw_${i}" style="margin:0;display:inline;">wall across the bottom</label>`}</p>
+    <div class="row2">
+      <div><label>Low grade <span class="unit">(ft)</span></label><input class="ovr" type="number" step="0.01" value="${esc(c.lowGrade==null?'':c.lowGrade)}" placeholder="${R.low!=null?R.low.toFixed(2):''}" onchange="chainSet(${i},'lowGrade',this.value)" title="Sets the bottom of footing (low grade less the depth below grade). Blank = the lowest grade entered at the piers next to it."></div>
+      <div><label>&nbsp;</label><p class="note" style="margin:6px 0 0;">${c.lowGrade!=null&&String(c.lowGrade).trim()!==''?'Entered':'Blank: '+esc(R.lowSrc||'')}. Bottom of footing = low grade &minus; ${ftin(R.WALL.frost)}${R.WALL.bofFix!=null?' = <strong>'+R.WALL.bofFix.toFixed(2)+'</strong>':''}${String(c.ftgBot==null?'':c.ftgBot).trim()!==''?' (set directly below)':''}.</p></div>
+    </div>
     ${R.isStair?`<div class="row4">
       <div><label>Top below platform <span class="unit">(ft)</span></label><input type="text" value="${c.wallBelow==null?1.125:c.wallBelow}" onchange="chainSet(${i},'wallBelow',parseFeetInches(this.value))" title="7&quot; FRP + 4&frac12;&quot; clear + 1&quot; base plate + 1&quot; grout = 13&frac12;&quot; (SP-312)"></div>
       <div><label>Wall length <span class="unit">(ft)</span></label><input type="text" value="${c.wallLen==null?'':c.wallLen}" placeholder="${(R.W+2*R.WALL.t).toFixed(2)}" onchange="chainSet(${i},'wallLen',this.value===''?'':parseFeetInches(this.value))"></div>
@@ -2674,7 +2714,7 @@ function renderChainUI(){
       <div><label>Footing width <span class="unit">(ft)</span></label><input type="text" value="${c.ftgW==null?3:c.ftgW}" onchange="chainSet(${i},'ftgW',parseFeetInches(this.value))"></div>
       <div><label>Footing thick <span class="unit">(ft)</span></label><input type="text" value="${c.ftgT==null?1.5:c.ftgT}" onchange="chainSet(${i},'ftgT',parseFeetInches(this.value))"></div>
       <div><label>Min. below grade <span class="unit">(ft)</span></label><input type="text" value="${c.frost==null?3.5:c.frost}" onchange="chainSet(${i},'frost',parseFeetInches(this.value))" title="Frost depth to bottom of footing"></div>
-      <div><label>Footing bottom</label><select onchange="chainSet(${i},'ftgMode',this.value)">${opt('level','Level',c.ftgMode||'slope')}${opt('slope','Follows grade',c.ftgMode||'slope')}</select></div>
+      ${R.isStair?'<div></div>':`<div><label>Footing bottom</label><select onchange="chainSet(${i},'ftgMode',this.value)">${opt('level','Level',c.ftgMode||'slope')}${opt('slope','Follows grade',c.ftgMode||'slope')}</select></div>`}
     </div>
     ${R.isStair?'':`<div class="row2" style="margin-top:6px;">
       <div><label>Entry walls start under the platform <span class="unit">(ft)</span></label><input type="text" value="${c.wallsUnder==null?'':c.wallsUnder}" placeholder="0" onchange="chainSet(${i},'wallsUnder',this.value===''?'':parseFeetInches(this.value))" title="For a landing straight back from the platform: how far the side walls run in front of the back edge, under the platform."></div>
@@ -2698,8 +2738,8 @@ function renderChainUI(){
       <div><label>Column height <span class="unit">(ft, 3D)</span></label><input type="text" value="${esc(c.colHt==null?'':c.colHt)}" placeholder="${ENG.C.colHt>0?ENG.C.colHt:12}" onchange="chainSet(${i},'colHt',this.value)"></div>
     </div>
     <p class="note" style="margin:4px 0 0;">Pad elev and below-platform blank: the pad is level at the higher end. A pad within 6" of a wall end runs to the end.</p></div>
-    ${c.ftgMode==='level'?`<label>Bottom of footing, level <span class="unit">(ft)</span></label>
-    <input class="ovr" type="number" step="0.01" value="${esc(c.ftgBot==null?'':c.ftgBot)}" placeholder="${R.WALL.bofFix!=null?R.WALL.bofFix.toFixed(2):''}" onchange="chainSet(${i},'ftgBot',this.value)" title="Blank = frost depth below the lowest grade along the walls.">`:''}
+    ${(c.ftgMode==='level'||R.isStair)?`<label>Bottom of footing, set directly <span class="unit">(ft, overrides low grade)</span></label>
+    <input class="ovr" type="number" step="0.01" value="${esc(c.ftgBot==null?'':c.ftgBot)}" placeholder="${R.WALL.bofFix!=null?R.WALL.bofFix.toFixed(2):''}" onchange="chainSet(${i},'ftgBot',this.value)" title="Blank = low grade less the depth below grade.">`:''}
   </fieldset>
   <div class="scroll" style="margin-top:10px;"><table class="subtbl"><tr><th class="lbl">#</th><th class="lbl">Segment</th><th>Length / count</th><th>Slope 1:x / tread (in)</th><th>Riser (in)</th><th>Elev at end</th><th>Plan elev</th><th>&Delta; (in)</th><th></th></tr>`;
   c.segs.forEach((g,j)=>{
