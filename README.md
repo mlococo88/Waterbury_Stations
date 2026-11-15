@@ -240,6 +240,15 @@ Copy as text and Print.
 
 ## Saving and defaults
 
+### Cloud sync (GitHub)
+The Library can copy every saved platform to the private GitHub repository the All-Structural tools use (`mlococo88/structural-projects`), so the same stations are on every device. It uses the All-Structural shared modules (`shared/projects.js`, `shared/github-sync.js`), copied in whole so the page stays a single file. Setup is the same as those tools (All-Structural `docs/github-sync-setup.md`): a fine-grained token with Contents read and write on that one repository, pasted in **Library → Cloud sync (GitHub)…**. A browser already set up for the All-Structural tools on mlococo88.github.io needs nothing more.
+
+- Each named platform is the file `projects/platform-geometry/<name>.json`, the same text as **Export JSON**. A file put there directly (for example a station generated from the plans) shows in the Library under **On GitHub only**; **Open** loads it and keeps a copy in this browser.
+- Saves upload in the background within a few seconds; offline saves wait and are retried. The Library shows each platform's GitHub status (synced, waiting to upload, this browser only, GitHub newer, conflict).
+- Nothing is overwritten or deleted on GitHub silently: a project changed on two devices keeps both (yours as a conflict copy), and deleting asks before removing the GitHub copy.
+- The token stays in this browser's storage, is sent only to api.github.com, and is never part of a platform file. With sync not set up, the app makes no request.
+
+
 - **Autosave** to browser storage.
 - **Library** of named platforms (Save / Save As / Open / Delete), stored in the browser.
 - **Export / Import JSON** for a portable copy — includes notes.
