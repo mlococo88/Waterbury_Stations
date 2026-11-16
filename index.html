@@ -3898,8 +3898,8 @@ function draw3D(){
         } else slab(a,b,Wd.t,a.top,b.top,fa,fb,COL3.rwall);
         if(a.ftgBot!=null&&b.ftgBot!=null){
           // footings run a toe past each end of the wall, closing the corners
-          const toe=Math.max(0,(Wd.fw-Wd.t)/2), L0=Math.hypot(b.x-a.x,b.y-a.y), ux=(b.x-a.x)/L0, uy=(b.y-a.y)/L0;
-          const a2= j===0 ? {x:a.x-ux*toe,y:a.y-uy*toe} : a, b2= j===Q.length-2 ? {x:b.x+ux*toe,y:b.y+uy*toe} : b;
+          const toe=Math.max(0,(Wd.fw-Wd.t)/2), eA=wl.extA!=null?wl.extA:toe, eB=wl.extB!=null?wl.extB:toe, L0=Math.hypot(b.x-a.x,b.y-a.y), ux=(b.x-a.x)/L0, uy=(b.y-a.y)/L0;
+          const a2= j===0 ? {x:a.x-ux*eA,y:a.y-uy*eA} : a, b2= j===Q.length-2 ? {x:b.x+ux*eB,y:b.y+uy*eB} : b;
           slab(a2,b2,Wd.fw,a.ftgTop,b.ftgTop,a.ftgBot,b.ftgBot,COL3.rftg,'under'); }
       }
       tg(mW,{t:'wall',ci,wi});
@@ -4153,17 +4153,18 @@ function sheetsBuild(){
   /* ---------- a wall, developed elevation (inches; x along the wall, y elevation) ---------- */
   function wallView(R,wl,k){
     const P=wl.pts, N=P.length, Wd=R.WALL, t0=P[0].t, tN=P[N-1].t, toe=Math.max(0,(Wd.fw-Wd.t)/2);
+    const eA=wl.extA!=null?wl.extA:toe, eB=wl.extB!=null?wl.extB:toe;   // footing past each end (to the far side of a wall it runs into)
     const hasF=P.every(q=>q.ftgBot!=null), hasG=P.every(q=>q.grade!=null), stw=wl.kind==='stair';
     const zb=Math.floor(Math.min(...P.map(q=>hasF?q.ftgBot:q.top-4)));
     const X=t=>(t-t0)*12, Y=z=>(z-zb)*12;
     const surf=q=>stw?R.z0:(q.surf!=null?q.surf:q.top-Wd.curb);
     // footing and stem
     if(hasF){
-      D.pline(L.conc,[[X(t0-toe),Y(P[0].ftgTop)],...P.map(q=>[X(q.t),Y(q.ftgTop)]),[X(tN+toe),Y(P[N-1].ftgTop)],[X(tN+toe),Y(P[N-1].ftgBot)],
-        ...P.slice().reverse().map(q=>[X(q.t),Y(q.ftgBot)]),[X(t0-toe),Y(P[0].ftgBot)]],true);
+      D.pline(L.conc,[[X(t0-eA),Y(P[0].ftgTop)],...P.map(q=>[X(q.t),Y(q.ftgTop)]),[X(tN+eB),Y(P[N-1].ftgTop)],[X(tN+eB),Y(P[N-1].ftgBot)],
+        ...P.slice().reverse().map(q=>[X(q.t),Y(q.ftgBot)]),[X(t0-eA),Y(P[0].ftgBot)]],true);
       D.pline(L.conc,[...P.map(q=>[X(q.t),Y(q.top)]),...P.slice().reverse().map(q=>[X(q.t),Y(q.ftgTop)])],true);
     } else D.pline(L.conc,P.map(q=>[X(q.t),Y(q.top)]),false);
-    if(hasG) D.pline(L.grade,[[X(t0-toe)-18,Y(P[0].grade)],...P.map(q=>[X(q.t),Y(q.grade)]),[X(tN+toe)+18,Y(P[N-1].grade)]],false);
+    if(hasG) D.pline(L.grade,[[X(t0-eA)-18,Y(P[0].grade)],...P.map(q=>[X(q.t),Y(q.grade)]),[X(tN+eB)+18,Y(P[N-1].grade)]],false);
     D.pline(L.walk,P.map(q=>[X(q.t),Y(surf(q))]),false);
     // walls that meet or cross this one, end-on
     { const A0=P[0], A1=P[N-1]; let ux=A1.x-A0.x, uy=A1.y-A0.y; const la=Math.hypot(ux,uy);
@@ -4201,7 +4202,7 @@ function sheetsBuild(){
       const ang=Math.atan2(dz,dt)*180/Math.PI, xm=X((a.t+b.t)/2), ym=Y((a.top+b.top)/2)-0.16*k;
       T(L.txt,xm,ym,0.075*k,'TOW '+(Math.abs(dz)/dt*100).toFixed(2)+'% (1:'+(dt/Math.abs(dz)).toFixed(2)+')',1,ang); }
     // ends: elevations and vertical dimension chains
-    [[0,-1],[N-1,1]].forEach(([j,sd])=>{ const q=P[j], xe=X(q.t)+sd*(hasF?toe*12:0), xa=xe+sd*0.45*k, xb=xe+sd*0.9*k, xt=xb+sd*0.12*k, jj=sd<0?2:0;
+    [[0,-1],[N-1,1]].forEach(([j,sd])=>{ const q=P[j], xe=X(q.t)+sd*(hasF?(sd<0?eA:eB)*12:0), xa=xe+sd*0.45*k, xb=xe+sd*0.9*k, xt=xb+sd*0.12*k, jj=sd<0?2:0;
       if(hasF){ const zs=[q.top]; if(hasG&&q.grade<q.top&&q.grade>q.ftgTop) zs.push(q.grade); zs.push(q.ftgTop,q.ftgBot);
         for(let i=0;i<zs.length-1;i++) D.dimV(L.dim,Y(zs[i+1]),Y(zs[i]),xa,X(q.t));
         D.dimV(L.dim,Y(q.ftgBot),Y(q.top),xb,X(q.t));
@@ -4217,10 +4218,11 @@ function sheetsBuild(){
     const yF=hasF?Math.min(...P.map(q=>Y(q.ftgBot))):Math.min(...P.map(q=>Y(q.top)));
     const xs=[]; P.forEach(q=>{ const x=X(q.t); if(!xs.length||x-xs[xs.length-1]>0.05) xs.push(x); });
     const y1=yF-0.35*k, y2=yF-0.7*k, y3=yF-1.05*k;
-    if(hasF&&toe>0){ D.dimH(L.dim,X(t0-toe),X(t0),y1,yF); D.dimH(L.dim,X(tN),X(tN+toe),y1,yF); }
+    if(hasF&&eA>0) D.dimH(L.dim,X(t0-eA),X(t0),y1,yF);
+    if(hasF&&eB>0) D.dimH(L.dim,X(tN),X(tN+eB),y1,yF);
     for(let i=0;i<xs.length-1;i++) D.dimH(L.dim,xs[i],xs[i+1],y1,yF);
     D.dimH(L.dim,X(t0),X(tN),y2,null,'<> WALL');
-    if(hasF&&toe>0) D.dimH(L.dim,X(t0-toe),X(tN+toe),y3,null,'<> FOOTING');
+    if(hasF&&(eA>0||eB>0)) D.dimH(L.dim,X(t0-eA),X(tN+eB),y3,null,'<> FOOTING');
     if(hasF){ const lv=P.every(q=>Math.abs(q.ftgBot-P[0].ftgBot)<1e-4); if(lv) T(L.txt,(X(t0)+X(tN))/2,yF+0.08*k,0.075*k,'BOTTOM OF FOOTING LEVEL AT '+P[0].ftgBot.toFixed(2),1); }
     viewTitle((X(t0)+X(tN))/2,y3-0.45*k,k,(R.ch.name+' - '+wl.name).toUpperCase(),(wl.desc+' - developed elevation').toUpperCase());
   }
@@ -4294,8 +4296,8 @@ function sheetsBuild(){
     // walls: stem outline, footing dashed, name
     const Wd=R.WALL, toe=Math.max(0,(Wd.fw-Wd.t)/2);
     (R.walls||[]).forEach(wl=>{ const A=wl.pts[0], B=wl.pts[wl.pts.length-1]; let ux=B.x-A.x, uy=B.y-A.y; const m=Math.hypot(ux,uy); if(m<1e-6) return; ux/=m; uy/=m;
-      const box=(h,e)=>[[A.x-ux*e-uy*h,A.y-uy*e+ux*h],[B.x+ux*e-uy*h,B.y+uy*e+ux*h],[B.x+ux*e+uy*h,B.y+uy*e-ux*h],[A.x-ux*e+uy*h,A.y-uy*e-ux*h]].map(p=>P2({x:p[0],y:p[1]}));
-      D.pline(L.conc,box(Wd.t/2,0),true); D.pline(L.ftg,box(Wd.fw/2,toe),true);
+      const box=(h,e,f)=>[[A.x-ux*e-uy*h,A.y-uy*e+ux*h],[B.x+ux*f-uy*h,B.y+uy*f+ux*h],[B.x+ux*f+uy*h,B.y+uy*f-ux*h],[A.x-ux*e+uy*h,A.y-uy*e-ux*h]].map(p=>P2({x:p[0],y:p[1]}));
+      D.pline(L.conc,box(Wd.t/2,0,0),true); D.pline(L.ftg,box(Wd.fw/2,wl.extA!=null?wl.extA:toe,wl.extB!=null?wl.extB:toe),true);
       const c=P2({x:(A.x+B.x)/2,y:(A.y+B.y)/2}), ang=Math.atan2(c[1]-P2(A)[1],c[0]-P2(A)[0])*180/Math.PI, an=(ang>90.01||ang<-89.99)?ang+180:ang;
       T(L.txt,c[0],c[1]-0.045*k,0.09*k,wl.name,1,an); });
     // pads and their columns
@@ -4705,7 +4707,7 @@ function openPop3(o){
       const wl=R.walls[o.wi]; if(!wl) return;
       title=esc(ch.name)+' · '+wl.name; sub=esc(wl.desc);
       const T=wl.pts.map(q=>q.top), Bf=wl.pts.map(q=>q.ftgBot).filter(v=>v!=null);
-      h+=kv([['Length',ftin(wl.len)],['Wall',ftin(R.WALL.t)+' thick'],['Footing',ftin(R.WALL.fw)+' × '+ftin(R.WALL.ft)+' (runs '+ftin((R.WALL.fw-R.WALL.t)/2)+' past each end)'],
+      h+=kv([['Length',ftin(wl.len)],['Wall',ftin(R.WALL.t)+' thick'],['Footing',ftin(R.WALL.fw)+' × '+ftin(R.WALL.ft)+', '+ftin(wl.len+(wl.extA||0)+(wl.extB||0))+' long (runs '+ftin(wl.extA!=null?wl.extA:(R.WALL.fw-R.WALL.t)/2)+(wl.joinA?' to the far face of the '+wl.joinA+' footing':'')+' past the start, '+ftin(wl.extB!=null?wl.extB:(R.WALL.fw-R.WALL.t)/2)+(wl.joinB?' to the far face of the '+wl.joinB+' footing':'')+' past the end)'],
         ['Top of wall, high / low',f3(Math.max(...T))+' / '+f3(Math.min(...T))],['Bottom of footing',Bf.length?f3(Math.max(...Bf))+(Math.max(...Bf)-Math.min(...Bf)>1e-4?' to '+f3(Math.min(...Bf)):' (level)'):'']]);
       h+=`<h2 class="sec mt">At each end and break</h2>`+tbl(wl.pts.map(q=>[esc(q.where),(q.t-wl.pts[0].t).toFixed(2),f3(q.top),f2(q.grade),f3(q.ftgTop),f3(q.ftgBot),q.height!=null?ftin(q.height):'—',q.exposed!=null?ftin(q.exposed):'—']),['Point','Along (ft)','Top of wall','Grade','TOF','BOF','Height','Exposed']);
       h+=svgBox('0 0 1500 560'); draw=()=>{ CHAIN_SEL=o.ci; WALL_SEL=o.wi; drawWallElev('svg_pop'); };
@@ -5126,6 +5128,29 @@ function mergeWalls(pieces, O, gradeAt, WALL){
               +(wl.side.filter(x=>!/end wall/.test(x)).length===1?' ('+wl.side.filter(x=>!/end wall/.test(x))[0]+')':'');
     wl.pts.forEach((q,j)=>{ q.where = j===0?'start':j===wl.pts.length-1?'end':('break '+j); });
   });
+  /* How far each wall's footing runs past each end (extA at the start, extB at the end). Free end: a toe of
+     (footing - wall)/2. An end that runs into another wall (it stops at that wall's face, its centreline,
+     or anywhere inside its footing): the footing carries on to the far edge of that wall's footing, so the
+     two footings make one continuous L or T instead of stopping short inside the other. */
+  const toe=Math.max(0,(WALL.fw-WALL.t)/2);
+  walls.forEach(wl=>{
+    const P=wl.pts, A0=P[0], A1=P[P.length-1]; let ux=A1.x-A0.x, uy=A1.y-A0.y; const la=Math.hypot(ux,uy);
+    wl.extA=toe; wl.extB=toe; wl.joinA=null; wl.joinB=null;
+    if(la<1e-6) return; ux/=la; uy/=la;
+    walls.forEach(wb=>{ if(wb===wl) return;
+      const Q=wb.pts, B0=Q[0], B1=Q[Q.length-1]; let vx=B1.x-B0.x, vy=B1.y-B0.y; const lb=Math.hypot(vx,vy); if(lb<1e-6) return; vx/=lb; vy/=lb;
+      const den=ux*vy-uy*vx; if(Math.abs(den)<0.2) return;              // parallel walls never close an end
+      [[A0,-1,'A'],[A1,1,'B']].forEach(([E,sd,key])=>{
+        // distance from this end, outward along the wall, to the other wall's centreline
+        const dx=B0.x-E.x, dy=B0.y-E.y, s=sd*(dx*vy-dy*vx)/den, tb=(dx*uy-dy*ux)/den;
+        if(s<-1e-3 || s>WALL.fw/2+0.05) return;                            // the end is not at (or inside) that footing
+        const hl=WALL.fw/2;
+        if(tb<-hl-0.05 || tb>lb+hl+0.05) return;                           // ...nor alongside it
+        const ext=s+WALL.fw/2;
+        if(ext>wl['ext'+key]+1e-6){ wl['ext'+key]=ext; wl['join'+key]=wb.name; }
+      });
+    });
+  });
   return walls;
 }
 function allChains(){ return ENG ? CHAINS.map(ch=>{ try{ return computeChain(ch); }catch(e){ return null; } }).filter(Boolean) : []; }
@@ -5359,7 +5384,8 @@ function drawChainPlan(){
       const e=0;            // walls already run to the outside faces of the walls they meet
       const cl=wl.pts.map((q,j)=>({x:q.x+(j===0?-ex*e:j===wl.pts.length-1?ex*e:0), y:q.y+(j===0?-ey*e:j===wl.pts.length-1?ey*e:0)}));
       const toe=Math.max(0,(Q.WALL.fw-Q.WALL.t)/2);
-      const clF=wl.pts.map((q,j)=>({x:q.x+(j===0?-ex*toe:j===wl.pts.length-1?ex*toe:0), y:q.y+(j===0?-ey*toe:j===wl.pts.length-1?ey*toe:0)}));
+      const eA=wl.extA!=null?wl.extA:toe, eB=wl.extB!=null?wl.extB:toe;
+      const clF=wl.pts.map((q,j)=>({x:q.x+(j===0?-ex*eA:j===wl.pts.length-1?ex*eB:0), y:q.y+(j===0?-ey*eA:j===wl.pts.length-1?ey*eB:0)}));
       const band=(half,line)=>{ const L=[],Rr=[];
         (line||cl).forEach(q=>{ L.push({x:q.x+ey*half,y:q.y-ex*half}); Rr.push({x:q.x-ey*half,y:q.y+ex*half}); });
         return L.concat(Rr.reverse()).map(RT); };
@@ -5435,7 +5461,8 @@ function drawWallElev(target){
   const stw=wl.kind==='stair', hasF=P.every(q=>q.ftgBot!=null), hasG=P.every(q=>q.grade!=null);
   const surf=q=> stw ? R.z0 : (q.surf!=null ? q.surf : q.top-Wd.curb);
   const t0=P[0].t, tN=P[N-1].t, len=Math.max(0.5,tN-t0);
-  const toeF=Math.max(0,(Wd.fw-Wd.t)/2);          // the footing runs this far past each end of the wall
+  const toeF=Math.max(0,(Wd.fw-Wd.t)/2);          // the footing runs this far past a free end of the wall
+  const eAF=wl.extA!=null?wl.extA:toeF, eBF=wl.extB!=null?wl.extB:toeF;   // ...and to the far side of a wall it runs into
   const zs=[]; P.forEach(q=>{ zs.push(q.top, surf(q)); if(hasF) zs.push(q.ftgBot,q.ftgTop); if(hasG) zs.push(q.grade); });
   const lo=Math.min(...zs), hi=Math.max(...zs);
   // true scale; the frame grows to fit, with room for callouts above and dimensions around
@@ -5473,7 +5500,7 @@ function drawWallElev(target){
        `<text x="16" y="${F(y+3)}" font-size="8.5" font-family="monospace" fill="var(--graphite)" text-anchor="start">${zz}.00</text>`; }
   // body: footing, stem, grade, walking surface
   if(hasF){
-    const xL=TX(t0-toeF), xR=TX(tN+toeF);
+    const xL=TX(t0-eAF), xR=TX(tN+eBF);
     s+=`<path d="M${F(xL)},${F(TY(P[0].ftgTop))} L${L(q=>q.ftgTop)} L${F(xR)},${F(TY(P[N-1].ftgTop))} L${F(xR)},${F(TY(P[N-1].ftgBot))} L${Lr(q=>q.ftgBot)} L${F(xL)},${F(TY(P[0].ftgBot))} Z" fill="rgba(28,26,23,.22)" stroke="var(--ink)" stroke-width="1"/>`;
     s+=`<path d="M${L(q=>q.top)} L${Lr(q=>q.ftgTop)} Z" fill="rgba(28,26,23,.08)" stroke="var(--ink)" stroke-width="1.4"/>`;
   } else s+=`<path d="M${L(q=>q.top)}" fill="none" stroke="var(--ink)" stroke-width="1.6"/>`;
@@ -5586,7 +5613,8 @@ function drawWallElev(target){
   P.forEach(q=>{ if(!brkA.length || q.t-brkA[brkA.length-1].t>1e-3){ brkA.push(q); brkB.push(q); } else brkB[brkB.length-1]=q; });
   const brk=brkA;
   const y1=yF+34, y2=yF+58, y3=yF+82;
-  if(hasF && toeF>0){ s+=hdim(TX(t0-toeF),TX(t0),y1,fi(toeF),TY(P[0].ftgBot)+2,null); s+=hdim(TX(tN),TX(tN+toeF),y1,fi(toeF),null,TY(P[N-1].ftgBot)+2); }
+  if(hasF && eAF>0) s+=hdim(TX(t0-eAF),TX(t0),y1,fi(eAF),TY(P[0].ftgBot)+2,null);
+  if(hasF && eBF>0) s+=hdim(TX(tN),TX(tN+eBF),y1,fi(eBF),null,TY(P[N-1].ftgBot)+2);
   for(let j=0;j<brk.length-1;j++){ const a=brk[j], b=brk[j+1];
     s+=hdim(TX(a.t),TX(b.t),y1,fi(b.t-a.t), j===0?TY(a.top)+2:yF+4, TY(b.top)+2); }
   // stretch descriptions: pads and sloping / level parts
@@ -5595,8 +5623,8 @@ function drawWallElev(target){
     const lab=isPad? a.pad+' PAD' : (Math.abs(b.top-a.top)<1e-3?'LEVEL':'SLOPED');
     s+=txt((TX(a.t)+TX(b.t))/2,y1+12,lab,{fs:7.5,c:isPad?'var(--oxide)':'var(--ink-soft)'}); }
   s+=hdim(TX(t0),TX(tN),y2,fi(len)+' WALL',null,null);
-  if(hasF && toeF>0) s+=hdim(TX(t0-toeF),TX(tN+toeF),y3,fi(len+2*toeF)+' FOOTING',null,null);
-  s+=txt((TX(t0)+TX(tN))/2,y3+(hasF&&toeF>0?26:0),`${wl.name} · ${esc(wl.desc)}`,{fs:9.5,b:true});
+  if(hasF && (eAF>0||eBF>0)) s+=hdim(TX(t0-eAF),TX(tN+eBF),y3,fi(len+eAF+eBF)+' FOOTING',null,null);
+  s+=txt((TX(t0)+TX(tN))/2,y3+(hasF&&(eAF>0||eBF>0)?26:0),`${wl.name} · ${esc(wl.desc)}`,{fs:9.5,b:true});
 
   // legend, one line across the top
   const leg=[fi(Wd.t)+' wall', fi(Wd.fw)+' \u00d7 '+fi(Wd.ft)+' footing',
