@@ -2548,6 +2548,16 @@ function ftin(v){
   let inch=(v-ft)*12; if(inch>=11.9995){ ft+=1; inch=0; }
   return sg+ft+'\'-'+inch.toFixed(2).replace(/\.?0+$/,'')+'"';
 }
+/* For the drawings: dimensions to the nearest 1/8" (5'-9 3/8"), elevations to two decimals. Tables, calculations
+   and the engine keep full precision. */
+function ftin8(v){
+  if(typeof v!=='number'||isNaN(v)) return '';
+  const sg=v<0?'-':''; let n=Math.round(Math.abs(v)*96); const ft=Math.floor(n/96); n-=ft*96; const inch=Math.floor(n/8), e=n-inch*8;
+  const FR=['','1/8','1/4','3/8','1/2','5/8','3/4','7/8'];
+  return sg+ft+"'-"+inch+(e?' '+FR[e]:'')+'"';
+}
+const in8=v=>{ if(typeof v!=='number'||isNaN(v)) return ''; const n=Math.round(v*8), i=Math.floor(n/8), e=n-i*8, FR=['','1/8','1/4','3/8','1/2','5/8','3/4','7/8'];
+  return (i||!e?i:'')+(e?(i?' ':'')+FR[e]:'')+'"'; };
 function enableFeetInches(id){
   const el=document.getElementById(id); if(!el||el._ftin) return; el._ftin=true;
   el.setAttribute('type','text');
@@ -2954,6 +2964,7 @@ function buildEngine(){
    ============================================================ */
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
 const F=(v,d)=> (typeof v==='number'&&isFinite(v)) ? v.toFixed(d==null?3:d) : '\u2014';
+const Fg=(v,d)=>F(v, d==null?2:Math.min(d,2));   // elevations in the drawings: two decimals
 
 /* ---- alignment elements ---- */
 function alignRows(){
@@ -3299,6 +3310,7 @@ function drawProfileView(id, opts){
    CROSS SECTION
    ============================================================ */
 function drawSection(id, sta, showStruct, bent){
+  const ftin=ftin8, F=Fg;   // drawing precision: 1/8" and two decimals
   const svg=document.getElementById(id); if(!svg||!ENG) return;
   const vb=svg.getAttribute('viewBox').split(/\s+/).map(Number), W=vb[2], H=vb[3];
   // in the 3D details panel the labels are scaled up to a readable size on screen; the label pass below keeps them apart
@@ -3486,7 +3498,7 @@ function drawSection(id, sta, showStruct, bent){
       s+=txt(x,yT-4,F(r.topB),'var(--ink)','middle',7.5);
       const yl=TY(r.capTop);      // just under the seat, inside the wall or cap (not down among the piles)
       s+=txt(x,yl+11, esc(r.lab)+(S.name?' \u00b7 '+S.name:'')+(r.anchor?' (anchor)':''),'var(--ink-soft)','middle',7.5);
-      s+=txt(x,yl+21, 'masonry '+(r.mas*12).toFixed(2)+'"','var(--oxide)','middle',7.5);
+      s+=txt(x,yl+21, 'masonry '+in8(r.mas*12),'var(--oxide)','middle',7.5);
     });
 
     if(C.pile && !wall && B.piles && B.piles.length){
@@ -3597,6 +3609,7 @@ function drawSection(id, sta, showStruct, bent){
    FRAMING PLAN  (true scale, platform over structure)
    ============================================================ */
 function drawFramePlan(){
+  const ftin=ftin8, F=Fg;   // drawing precision: 1/8" and two decimals
   const id='svg_frame', svg=document.getElementById(id); if(!svg||!ENG) return;
   const W=1200, pad=30;
   const C=ENG.C, B=ENG.bents();
@@ -3704,8 +3717,8 @@ function drawFramePlan(){
       [sta,bent.sta].forEach(t2=>{ const a=RT(ENG.platPt(t2,C.W,0)), z=RT(ENG.platPt(t2,wFar-1,0));
         s+=`<line x1="${TX(a.x).toFixed(1)}" y1="${TY(a.y).toFixed(1)}" x2="${TX(z.x).toFixed(1)}" y2="${TY(z.y).toFixed(1)}" stroke="var(--oxide)" stroke-width="0.7"/>`; });
     };
-    mark(s0,B[0],'cant '+(B[0].sta-s0).toFixed(2)+"'");
-    mark(s1,B[B.length-1],'cant '+(s1-B[B.length-1].sta).toFixed(2)+"'");
+    mark(s0,B[0],'cant '+ftin8(B[0].sta-s0));
+    mark(s1,B[B.length-1],'cant '+ftin8(s1-B[B.length-1].sta));
   }
   if(BEAMS.length && B.length>1) BEAMS.forEach(bm=>{ const p=RT(ENG.platPt(Math.max(s1,B[B.length-1].sta)+3,+bm.off,0));
     s+=`<text x="${TX(p.x).toFixed(1)}" y="${(TY(p.y)+3).toFixed(1)}" font-size="8" font-family="monospace" fill="var(--ink)" text-anchor="middle">${esc(bm.lab)}</text>`; });
@@ -3727,6 +3740,7 @@ const COL3={ plat:[168,196,198], panel:[136,166,169], beam:[64,68,74], cap:[150,
              ramp:[204,198,184], stair:[120,128,138], rwall:[172,166,154], rftg:[140,136,126] };
 
 function draw3D(){
+  const ftin=ftin8, F=Fg;   // drawing precision: 1/8" and two decimals
   const svg=document.getElementById('svg_3d'); if(!svg||!ENG) return;
   const W=1200,H=620;
   const C=ENG.C, B=ENG.bents();
@@ -4347,7 +4361,7 @@ function sheetsBuild(){
     const C=ENG.C, rails=b.rails||{}, eo=ENG.edgeOff(b.sta), wall=!!b.wall;
     const zs=[b.edgeElev,b.backElev,rails.zNear||b.edgeElev,b.botCap,b.grade]; if(b.ftBot!=null) zs.push(b.ftBot); if(b.pcBot!=null) zs.push(b.pcBot);
     if(C.pile&&!wall&&(b.piles||[]).length) zs.push(b.botCap-2.5-0.3); if(C.pile&&!wall&&(b.pedPiles||[]).length) zs.push(b.pcBot-2.5-0.3);
-    const zb=Math.floor(Math.min(...zs)-0.5), X=w=>w*12, Y=z=>(z-zb)*12, f3=v=>v==null?'-':(+v).toFixed(3), f2=v=>v==null?'-':(+v).toFixed(2);
+    const zb=Math.floor(Math.min(...zs)-0.5), X=w=>w*12, Y=z=>(z-zb)*12, f3=v=>v==null?'-':(+v).toFixed(2), f2=v=>v==null?'-':(+v).toFixed(2);
     // platform panel (cross slope), rails and track centreline
     D.pline(L.conc,[[0,Y(b.edgeElev)],[X(C.W),Y(b.backElev)],[X(C.W),Y(b.backElev-C.panel)],[0,Y(b.edgeElev-C.panel)]],true);
     const wN=-eo+C.gauge/2, wF=-eo-C.gauge/2;
@@ -4406,7 +4420,7 @@ function sheetsBuild(){
     const tx=xr+2.25*k, ty=Y(Math.max(b.edgeElev,b.backElev))+0.45*k;
     const rows=[['STATION',formatStation(b.sta)],['SKEW',(+b.skew||0)+' DEG'],['GRADE',f2(b.grade)+(b.gradeOwn?'':' (DEFAULT)')],['TOP OF RAIL (NEAR)',f3(rails.zNear)],
       ['TOP OF PLATFORM EDGE / BACK',f3(b.edgeElev)+' / '+f3(b.backElev)],[(wall?'TOP OF WALL':'TOP OF CAP')+' FRONT / BACK',f3(b.capFront)+' / '+f3(b.capBack)],
-      [wall?'BOTTOM OF WALL':'BOTTOM OF CAP',f3(b.botCap)],[wall?'WALL HEIGHT':'CAP DEPTH',shFI((b.capRef-b.botCap)*12)],[(wall?'WALL':'CAP')+' (FRONT FROM EDGE)',shFI(C.capT*12)+' x '+shFI(C.capW*12)+' @ '+shFI(C.capF*12)]];
+      [wall?'BOTTOM OF WALL':'BOTTOM OF CAP',f3(b.botCap)],[wall?'WALL HEIGHT':'CAP DEPTH',shFI((b.capRef-b.botCap)*12)],[wall?'WALL':'CAP',shFI(C.capT*12)+' x '+shFI(C.capW*12)],[(wall?'WALL':'CAP')+' FRONT FROM EDGE',shFI(C.capF*12)]];
     if(b.ftTop!=null) rows.push(['FOOTING',shFI(b.ftL*12)+' x '+shFI(b.ftW*12)+' x '+shFI(C.ftT*12)],['TOP / BOTTOM OF FOOTING',f3(b.ftTop)+' / '+f3(b.ftBot)],['BOTTOM OF EXCAVATION',f3(b.ftExcav)]);
     if(C.ped) rows.push(['PEDESTAL (CL FROM EDGE)',shFI(C.pedW*12)+' SQ. @ '+shFI(b.pedOff*12)],['TOP / BOTTOM OF PEDESTAL',f3(b.pedTop)+' / '+f3(b.pedBot)],['BOBP / TOP OF BASE PLATE',f3(b.pedTop+C.grout)+' / '+f3(b.colBase)]);
     if(b.pcTop!=null) rows.push(['PILE CAP',shFI(C.pcW*12)+' x '+shFI(C.pcT*12)+' x '+shFI(C.pcD*12)],['PILE CAP TOP / BOTTOM',f3(b.pcTop)+' / '+f3(b.pcBot)],['PILE CAP COVER / SET BY',(b.pcCover==null?'-':shFI(b.pcCover*12))+' / '+(b.pcGov==='pedestal'?'MIN. PED. HT.':'BURIAL')],['PEDESTAL HEIGHT',shFI((b.pedHt||0)*12)]);
@@ -4415,9 +4429,9 @@ function sheetsBuild(){
     let y=tableK(tx,ty,k,b.name+' - PIER DATA',[['ITEM',1.7],['VALUE',1.3],['ITEM',1.6],['VALUE',1.5]],rows2,0.06);
     const tW=(1.7+1.3+1.6+1.5)*k;
     y=tableK(tx,y-0.3*k,k,'BEAM SEATS',[['BEAM',0.55],['OFFSET',0.75],['T.O. PLAT.',0.75],['T.O. BEAM',0.75],['SOLE',0.45],['PAD',0.45],['MASONRY',0.6],['SEAT',0.75]],
-      (b.rows||[]).map(r=>[r.lab+(r.anchor?'*':''),shFI(r.off*12),f3(r.zP),f3(r.topB),(r.sole*12).toFixed(2)+'"',(r.elast*12).toFixed(2)+'"',(r.mas*12).toFixed(3)+'"',f3(r.capTop)]),0.065);
+      (b.rows||[]).map(r=>[r.lab+(r.anchor?'*':''),shFI(r.off*12),f3(r.zP),f3(r.topB),in8(r.sole*12),in8(r.elast*12),in8(r.mas*12),f3(r.capTop)]),0.065);
     if(allP.length) y=tableK(tx,y-0.3*k,k,'MICROPILES',[['PILE',0.55],['SUPPORTS',0.9],['FROM EDGE',0.9],['FROM CL TRK',0.9],['TOP OF PILE',0.9],['DIA.',0.7],['EMBED.',0.7]],
-      allP.map(p=>[p.lab,p.lab.startsWith('PP')?'PILE CAP':'CAP',shFI(p.off*12),shFI(p.offCL*12),f3(p.cut),(p.dia*12).toFixed(3)+'"',shFI(C.pileEmbed*12)]),0.065);
+      allP.map(p=>[p.lab,p.lab.startsWith('PP')?'PILE CAP':'CAP',shFI(p.off*12),shFI(p.offCL*12),f3(p.cut),in8(p.dia*12),shFI(C.pileEmbed*12)]),0.065);
     const notes=['* ANCHOR BEAM: MASONRY PLATE FIXED; OTHERS SOLVED FROM THE CROSS SLOPE.', (C.capMode==='level'?'PIER TOP LEVEL; MASONRY PLATES VARY.':'PIER TOP SLOPED WITH THE PLATFORM; PLATES CONSTANT.'),
       'TOP OF PLATFORM AT THE EDGE = TOP OF NEAR RAIL + V ('+shFI(C.V*12)+'); CROSS SLOPE '+C.xs+'%.',
       b.ftTop!=null?'BOTTOM OF FOOTING = GRADE - '+shFI(C.ftBury*12)+'; FOOTING '+shFI(C.ftProj*12)+' PAST THE WALL AND PEDESTAL FACES; '+shFI(C.ftFill*12)+' GRANULAR FILL BELOW.':'TOP OF MICROPILE = BOTTOM OF CAP + '+shFI(C.pileEmbed*12)+' EMBEDMENT. PILE TIPS, LENGTHS AND CAPACITIES BY THE GEOTECHNICAL DESIGN.',
@@ -4497,7 +4511,7 @@ function sheetsBuild(){
   function genView(k){
     const C=ENG.C, sA=Math.min(C.sta0,C.sta1), sB=Math.max(C.sta0,C.sta1), sm=(sA+sB)/2, a=ENG.align.at(sm), RT=rotator(a.brg-Math.PI/2);
     const XS=st=>RT(ENG.platPt(st,0,0)).x*12;            // a station's position across the sheet, as in the plan
-    const f2=v=>v==null||!isFinite(v)?'-':(+v).toFixed(2), f3=v=>v==null||!isFinite(v)?'-':(+v).toFixed(3);
+    const f2=v=>v==null||!isFinite(v)?'-':(+v).toFixed(2), f3=v=>v==null||!isFinite(v)?'-':(+v).toFixed(2);
     const RS2=CHAINS.map(ch=>{ try{ return computeChain(ch); }catch(e){ return null; } }).filter(Boolean);
     let s0=sA, s1=sB; RS2.forEach(R=>{ s0=Math.min(s0,R.sta-25); s1=Math.max(s1,R.sta+25); });
     const e0=s0-20, e1=s1+20, xL=Math.min(XS(e0),XS(e1)), xR=Math.max(XS(e0),XS(e1));
@@ -4558,7 +4572,7 @@ function sheetsBuild(){
     ty=tableK(tx,ty-0.35*k,k,'TOP OF RAIL PROFILE',[['PVI',0.35],['STATION',0.75],['ELEVATION',0.7],['GRADE IN',0.7],['GRADE OUT',0.7],['VC LENGTH',0.7]],
       pv.map((v,i)=>[i===0?'BEG':(i===pv.length-1?'END':String(i)),formatStation(v.sta),f3(v.elev),v.gradeIn!=null?(v.gradeIn*100).toFixed(3)+'%':'-',v.gradeOut!=null?(v.gradeOut*100).toFixed(3)+'%':'-',v.L>0&&i>0&&i<pv.length-1?v.L.toFixed(0)+"'":'-']),0.055);
     const sup=SUPERS.map(r=>({sta:+r.sta,e:+r.e})).filter(r=>!isNaN(r.sta)&&!isNaN(r.e));
-    if(sup.length) ty=tableK(tx,ty-0.35*k,k,'SUPERELEVATION (CANT)',[['STATION',0.75],['CANT (IN)',0.7]],sup.map(r=>[formatStation(r.sta),r.e.toFixed(3)]),0.055);
+    if(sup.length) ty=tableK(tx,ty-0.35*k,k,'SUPERELEVATION (CANT)',[['STATION',0.75],['CANT (IN)',0.7]],sup.map(r=>[formatStation(r.sta),in8(r.e).replace('"','')]),0.055);
     ty=tableK(tx,ty-0.35*k,k,'PLATFORM',[['ITEM',1.5],['VALUE',1.6]],[
       ['LIMITS',formatStation(sA)+' TO '+formatStation(sB)],['LENGTH',shFI((sB-sA)*12)],['SIDE OF TRACK',String(C.side).toUpperCase()],
       ['EDGE FROM CL TRACK',shFI(ENG.edgeOff(sm)*12)],['HEIGHT ABOVE RAIL (V)',shFI(C.V*12)],['CROSS SLOPE',C.xs+'% '+(C.xsDir==='away'?'AWAY FROM':'TOWARD')+' TRACK'],
@@ -4583,14 +4597,14 @@ function sheetsBuild(){
   for(let i=0;i<BS.length;i+=2){ const pair=BS.slice(i,i+2);
     sheet('pier'+i,('pier details '+pair.map(b=>b.name).join(', ')).toUpperCase(),k=>stack(pair.map(b=>kk=>pierView(b,kk)),k,0.5)); }
   // pier schedule
-  sheet('pschd','PIER SCHEDULE',k=>{ const f3=v=>v==null?'-':(+v).toFixed(3), C=ENG.C;
+  sheet('pschd','PIER SCHEDULE',k=>{ const f3=v=>v==null?'-':(+v).toFixed(2), C=ENG.C;
     const isW=BS.some(b=>b.wall), pl=!isW&&C.pile, pc=!isW&&BS.some(b=>b.pcTop!=null);
     const cols=[['PIER',0.55],['STATION',1.05],['GRADE',0.65],['T.O. RAIL',0.8],['T.O.P. EDGE',0.85],['T.O.P. BACK',0.85],[isW?'TOP OF WALL':'TOP OF CAP',0.85],[isW?'BOT. OF WALL':'BOT. OF CAP',0.85],
       ...(isW?[['BOF',0.75],['BOT. EXCAV.',0.8]]:[]),...(pl?[['TOP OF PILES',0.85]]:[]),...(pc?[['T.O. PILE CAP',1.0],['B.O. PILE CAP',1.0]]:[]),...(pl&&pc?[['T.O. PED. PILES',1.1]]:[]),
       ['TOP OF PED.',0.8],['BOBP',0.75],[isW?'WALL HT.':'CAP DEPTH',0.75],['EXPOSURE',0.75],...(BS[0]&&BS[0].rows||[]).map(r=>['MAS. '+r.lab,0.65])];
     tableK(0,0,1,'PIER SCHEDULE (ELEVATIONS IN FEET)',cols,BS.map(b=>[b.name,formatStation(b.sta),(+b.grade).toFixed(2),f3(b.rails&&b.rails.zNear),f3(b.edgeElev),f3(b.backElev),f3(b.capBack),f3(b.botCap),
       ...(isW?[f3(b.ftBot),f3(b.ftExcav)]:[]),...(pl?[f3(b.pileCut)]:[]),...(pc?[f3(b.pcTop),f3(b.pcBot)]:[]),...(pl&&pc?[f3((b.pedPiles||[])[0]&&b.pedPiles[0].cut)]:[]),
-      C.ped?f3(b.pedTop):'-',C.ped?f3(b.pedTop+C.grout):'-',shFI((b.capRef-b.botCap)*12),shFI((b.exposure||0)*12),...(b.rows||[]).map(r=>(r.mas*12).toFixed(3)+'"')]),0.07);
+      C.ped?f3(b.pedTop):'-',C.ped?f3(b.pedTop+C.grout):'-',shFI((b.capRef-b.botCap)*12),shFI((b.exposure||0)*12),...(b.rows||[]).map(r=>in8(r.mas*12))]),0.07);
   },1);
   // schedules and notes, in paper inches
   sheet('sched','WALL AND COLUMN SCHEDULES, NOTES',k=>{
@@ -5330,6 +5344,7 @@ function renderChainUI(){
 
 /* ---------- drawings ---------- */
 function drawChainProfile(){
+  const ftin=ftin8, F=Fg;   // drawing precision: 1/8" and two decimals
   const svg=document.getElementById('svg_chprof'); if(!svg||!ENG) return;
   if(!CHAINS.length){ svg.innerHTML=''; return; }
   const R=computeChain(CHAINS[CHAIN_SEL]);
@@ -5367,9 +5382,9 @@ function drawChainProfile(){
   // segment labels and turns
   R.segs.forEach(g=>{
     const xm=TX((g.dist1+g.dist2)/2), ym=TY((g.z1+g.z2)/2);
-    if(g.k==='run') s+=`<text x="${xm.toFixed(1)}" y="${(ym-8).toFixed(1)}" font-size="9" font-family="monospace" fill="var(--ink)" text-anchor="middle" paint-order="stroke" stroke="var(--paper)" stroke-width="2.6">1:${g.ratio.toFixed(2)} · ${ftin(g.L)} · drop ${(g.dz*12).toFixed(2)}"</text>`;
+    if(g.k==='run') s+=`<text x="${xm.toFixed(1)}" y="${(ym-8).toFixed(1)}" font-size="9" font-family="monospace" fill="var(--ink)" text-anchor="middle" paint-order="stroke" stroke="var(--paper)" stroke-width="2.6">1:${g.ratio.toFixed(2)} · ${ftin(g.L)} · drop ${in8(g.dz*12)}</text>`;
     if(g.k==='land') s+=`<text x="${xm.toFixed(1)}" y="${(ym-6).toFixed(1)}" font-size="8.5" font-family="monospace" fill="var(--ink-soft)" text-anchor="middle">${ftin(g.L)} landing</text>`;
-    if(g.k==='stair') s+=`<text x="${(xm+8).toFixed(1)}" y="${(ym-10).toFixed(1)}" font-size="9" font-family="monospace" fill="var(--ink)" text-anchor="start" paint-order="stroke" stroke="var(--paper)" stroke-width="2.6">${g.n} R @ ${(g.riser*12).toFixed(2)}" · ${g.treadsN} T @ ${(g.td*12).toFixed(2)}"</text>`;
+    if(g.k==='stair') s+=`<text x="${(xm+8).toFixed(1)}" y="${(ym-10).toFixed(1)}" font-size="9" font-family="monospace" fill="var(--ink)" text-anchor="start" paint-order="stroke" stroke="var(--paper)" stroke-width="2.6">${g.n} R @ ${in8(g.riser*12)} · ${g.treadsN} T @ ${in8(g.td*12)}</text>`;
     if(g.k==='turn') s+=`<line x1="${TX(g.dist1).toFixed(1)}" y1="${(TY(g.z1)-18).toFixed(1)}" x2="${TX(g.dist1).toFixed(1)}" y2="${(TY(g.z1)+18).toFixed(1)}" stroke="var(--cyan)" stroke-width="1" stroke-dasharray="3 2"/>`+
       `<text x="${TX(g.dist1).toFixed(1)}" y="${(TY(g.z1)-22).toFixed(1)}" font-size="8.5" font-family="monospace" fill="var(--cyan)" text-anchor="middle">turn ${g.deg}°</text>`;
   });
@@ -5386,6 +5401,7 @@ function drawChainProfile(){
 }
 
 function drawChainPlan(){
+  const ftin=ftin8, F=Fg;   // drawing precision: 1/8" and two decimals
   const svg=document.getElementById('svg_chplan'); if(!svg||!ENG) return;
   const C=ENG.C, ALL=allChains();
   if(!ALL.length){ svg.innerHTML=''; return; }
