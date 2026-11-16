@@ -3461,7 +3461,6 @@ function drawSection(id, sta, showStruct, bent){
       const fa=B.ftA, fb=B.ftB, fc=(fa+fb)/2;
       s+=`<rect x="${Math.min(TX(eOff+fa),TX(eOff+fb)).toFixed(1)}" y="${TY(B.ftTop).toFixed(1)}" width="${Math.abs(TX(eOff+fb)-TX(eOff+fa)).toFixed(1)}" height="${Math.max(3,TY(B.ftBot)-TY(B.ftTop)).toFixed(1)}" fill="rgba(28,26,23,.16)" stroke="var(--ink)" stroke-width="1.2"/>`;
       s+=txt(TX(eOff+fc),TY((B.ftTop+B.ftBot)/2)+3,'SPREAD FOOTING '+F(B.ftBot,2),'var(--ink)','middle',8.5,true);
-      s+=txt(TX(eOff+fa)-6*mir,TY(B.ftTop)-4,'top '+F(B.ftTop,2),'var(--ink-soft)',AOUT,7.5);
       if(C.ftFill>0){
         const ga=fa-C.ftFill, gb=fb+C.ftFill;   // 1:1 side slopes
         s+=`<path d="M${TX(eOff+fa)},${TY(B.ftBot)} L${TX(eOff+fb)},${TY(B.ftBot)} L${TX(eOff+gb)},${TY(B.ftExcav)} L${TX(eOff+ga)},${TY(B.ftExcav)} Z" fill="rgba(139,133,118,.28)" stroke="var(--graphite)" stroke-width="1" stroke-dasharray="3 2"/>`;
@@ -3485,7 +3484,7 @@ function drawSection(id, sta, showStruct, bent){
         s+=`<rect x="${(x-wMas).toFixed(1)}" y="${TY(zPad)}" width="${(wMas*2).toFixed(1)}" height="${Math.max(1.5,TY(r.capTop)-TY(zPad)).toFixed(1)}" fill="var(--oxide)" opacity="0.8"/>`;
       }
       s+=txt(x,yT-4,F(r.topB),'var(--ink)','middle',7.5);
-      const yl=wall?TY(r.capTop):TY(B.botCap);      // under the seat on a wall, under the cap on a cap beam
+      const yl=TY(r.capTop);      // just under the seat, inside the wall or cap (not down among the piles)
       s+=txt(x,yl+11, esc(r.lab)+(S.name?' \u00b7 '+S.name:'')+(r.anchor?' (anchor)':''),'var(--ink-soft)','middle',7.5);
       s+=txt(x,yl+21, 'masonry '+(r.mas*12).toFixed(2)+'"','var(--oxide)','middle',7.5);
     });
@@ -3515,8 +3514,9 @@ function drawSection(id, sta, showStruct, bent){
 
       if(pcOn){
         s+=`<rect x="${(TX(po)-C.pcW*k/2).toFixed(1)}" y="${TY(B.pcTop)}" width="${(C.pcW*k).toFixed(1)}" height="${Math.max(3,TY(B.pcBot)-TY(B.pcTop)).toFixed(1)}" fill="rgba(28,26,23,.14)" stroke="var(--ink)" stroke-width="1.2"/>`;
-        s+=txt(TX(po)-mir*(C.pcW*k/2+6),TY(B.pcTop)+4,'PILE CAP '+F(B.pcTop,2),'var(--ink)',mir>0?'end':'start',8,true);
-        s+=txt(TX(po)-mir*(C.pcW*k/2+6),TY(B.pcBot)-3,'bot '+F(B.pcBot,2),'var(--ink-soft)',mir>0?'end':'start',7.5);
+        // labelled inside the pile cap, clear of the pier cap and its piles
+        s+=txt(TX(po),TY(B.pcTop)+13,'PILE CAP '+F(B.pcTop,2),'var(--ink)','middle',8,true);
+        s+=txt(TX(po),TY(B.pcBot)-5,'bot '+F(B.pcBot,2),'var(--ink-soft)','middle',7.5);
         if(B.grade==null) s+=txt(TX(po),TY(B.pcBot)+40,'cover unknown \u2014 no proposed grade','var(--oxide)','middle',7.5);
         if(B.pedPiles) B.pedPiles.forEach(q=>{
           const x=TX(eOff+q.off), hd=Math.max(1.1,q.dia*k/2);
@@ -3545,8 +3545,8 @@ function drawSection(id, sta, showStruct, bent){
     s+=`<line x1="${TX(railNearO)}" y1="${TY(R.zNear)}" x2="${TX(eOff+0.4)}" y2="${TY(R.zNear)}" stroke="${DC}" stroke-width="0.4" stroke-dasharray="3 3"/>`;
     s+=dimV(TX(eOff)-16*mir, R.zNear, zEdge, ftin(zEdge-R.zNear));
     if(showStruct){
-      // cap depth on the outboard face
-      s+=dimV(TX(eOff+capF)-14*mir, zCF, B.botCap, ftin(C.capD));
+      // cap depth on the outboard face (a pier wall has no cap: its full height is dimensioned on the back face)
+      if(!B.wall) s+=dimV(TX(eOff+capF)-14*mir, zCF, B.botCap, ftin(C.capD));
       // pile spacing chain under the cap
       if(C.pile && B.piles && B.piles.length){
         const yP=TY(B.botCap)+34;
@@ -4376,7 +4376,7 @@ function sheetsBuild(){
     const gL=Math.min(-eo-C.gauge,b.ftA!=null?b.ftA:wA)-2, gR=Math.max(C.W,b.ftB!=null?b.ftB:wB,C.ped?b.pedOff+Math.max(C.pedW,b.pcTop!=null?C.pcW/2+1:0):0)+2;
     D.line(L.grade,X(gL),Y(b.grade),X(gR),Y(b.grade));
     // elevations on the right, spread so none overlap
-    const xr=X(gR)+0.3*k, labs=[[b.colBase,'TOP OF BASE PLATE '+f3(b.colBase),C.ped],[C.ped?b.pedTop+C.grout:null,'BOBP '+f3(C.ped?b.pedTop+C.grout:null),C.ped],[b.pedTop,'TOP OF PEDESTAL '+f3(b.pedTop),C.ped],
+    const xr=X(gR)+(b.pcTop!=null?0.55:0.3)*k, labs=[[b.colBase,'TOP OF BASE PLATE '+f3(b.colBase),C.ped],[C.ped?b.pedTop+C.grout:null,'BOBP '+f3(C.ped?b.pedTop+C.grout:null),C.ped],[b.pedTop,'TOP OF PEDESTAL '+f3(b.pedTop),C.ped],
       [b.backElev,'TOP OF PLATFORM (BACK) '+f3(b.backElev),true],[b.capBack,(wall?'TOP OF PIER WALL ':'TOP OF CAP ')+f3(b.capBack),true],[b.grade,'GRADE '+f2(b.grade),true],
       [b.botCap,(wall?'BOT. OF WALL / TOP OF FTG ':'BOTTOM OF CAP ')+f3(b.botCap),true],[b.ftBot,'BOTTOM OF FOOTING '+f3(b.ftBot),b.ftBot!=null],[b.ftExcav,'BOT. OF EXCAVATION '+f3(b.ftExcav),b.ftExcav!=null],
       [b.pcTop,'TOP OF PILE CAP '+f3(b.pcTop),b.pcTop!=null],[b.pcBot,'BOTTOM OF PILE CAP '+f3(b.pcBot),b.pcBot!=null],
@@ -4395,17 +4395,20 @@ function sheetsBuild(){
     if(b.ftA!=null) D.dimH(L.dim,X(b.ftA),X(b.ftB),yBot-0.3*k,null,'<> FOOTING');
     if(allP.length){ const px=[0,...allP.map(p=>X(p.off))]; D.chainH(L.dim,[...new Set(px.map(v=>+v.toFixed(3)))].sort((a,c)=>a-c),yBot-0.3*k,yBot); T(L.dim,X(-0.5),yBot-0.3*k+0.04*k,0.065*k,'PILES',2); }
     // vertical chains at the back: platform, wall, footing and grade
-    const xv=X(gR)+0.1*k-0.25*k, vz=[b.backElev,b.backElev-C.panel,b.capBack,b.botCap]; if(b.ftBot!=null) vz.push(b.ftBot); if(b.pcTop!=null) vz.push(b.pcTop,b.pcBot); vz.sort((a,c)=>c-a);
+    const xv=X(gR)+0.1*k-0.25*k, vz=[b.backElev,b.backElev-C.panel,b.capBack,b.botCap]; if(b.ftBot!=null) vz.push(b.ftBot); vz.sort((a,c)=>c-a);
     for(let i=0;i<vz.length-1;i++) D.dimV(L.dim,Y(vz[i+1]),Y(vz[i]),X(gR)-0.2*k,X(C.W));
+    // the pedestal and its pile cap sit behind the pier cap: their heights get a chain of their own, further out
+    if(b.pcTop!=null){ const pz=[b.pedTop,b.pcTop,b.pcBot].filter(v=>v!=null).sort((a,c)=>c-a), xp=X(gR)+0.17*k;
+      for(let i=0;i<pz.length-1;i++) D.dimV(L.dim,Y(pz[i+1]),Y(pz[i]),xp,X(b.pedOff+C.pcW/2)); }
     if(b.ftBot!=null) D.dimV(L.dim,Y(b.ftBot),Y(b.grade),X(b.ftA)-0.3*k,X(b.ftA),'<> TO BOF');
     T(L.txt,(X(gL)+X(gR))/2,yBot-(allP.length&&b.ftA==null?0.6:0.65)*k,0.11*k,'SECTION AT '+b.name+' (LOOKING UP-STATION)',1);
     // tables and notes, to the right of the section's elevations
     const tx=xr+2.25*k, ty=Y(Math.max(b.edgeElev,b.backElev))+0.45*k;
     const rows=[['STATION',formatStation(b.sta)],['SKEW',(+b.skew||0)+' DEG'],['GRADE',f2(b.grade)+(b.gradeOwn?'':' (DEFAULT)')],['TOP OF RAIL (NEAR)',f3(rails.zNear)],
       ['TOP OF PLATFORM EDGE / BACK',f3(b.edgeElev)+' / '+f3(b.backElev)],[(wall?'TOP OF WALL':'TOP OF CAP')+' FRONT / BACK',f3(b.capFront)+' / '+f3(b.capBack)],
-      [wall?'BOTTOM OF WALL':'BOTTOM OF CAP',f3(b.botCap)],[wall?'WALL HEIGHT':'CAP DEPTH',shFI((b.capRef-b.botCap)*12)],[wall?'WALL':'CAP',shFI(C.capT*12)+' x '+shFI(C.capW*12)+', FRONT '+shFI(C.capF*12)+' BEHIND EDGE']];
+      [wall?'BOTTOM OF WALL':'BOTTOM OF CAP',f3(b.botCap)],[wall?'WALL HEIGHT':'CAP DEPTH',shFI((b.capRef-b.botCap)*12)],[(wall?'WALL':'CAP')+' (FRONT FROM EDGE)',shFI(C.capT*12)+' x '+shFI(C.capW*12)+' @ '+shFI(C.capF*12)]];
     if(b.ftTop!=null) rows.push(['FOOTING',shFI(b.ftL*12)+' x '+shFI(b.ftW*12)+' x '+shFI(C.ftT*12)],['TOP / BOTTOM OF FOOTING',f3(b.ftTop)+' / '+f3(b.ftBot)],['BOTTOM OF EXCAVATION',f3(b.ftExcav)]);
-    if(C.ped) rows.push(['PEDESTAL',shFI(C.pedW*12)+' SQ., '+shFI(b.pedOff*12)+' BEHIND EDGE'],['TOP / BOTTOM OF PEDESTAL',f3(b.pedTop)+' / '+f3(b.pedBot)],['BOBP / TOP OF BASE PLATE',f3(b.pedTop+C.grout)+' / '+f3(b.colBase)]);
+    if(C.ped) rows.push(['PEDESTAL (CL FROM EDGE)',shFI(C.pedW*12)+' SQ. @ '+shFI(b.pedOff*12)],['TOP / BOTTOM OF PEDESTAL',f3(b.pedTop)+' / '+f3(b.pedBot)],['BOBP / TOP OF BASE PLATE',f3(b.pedTop+C.grout)+' / '+f3(b.colBase)]);
     if(b.pcTop!=null) rows.push(['PILE CAP',shFI(C.pcW*12)+' x '+shFI(C.pcT*12)+' x '+shFI(C.pcD*12)],['PILE CAP TOP / BOTTOM',f3(b.pcTop)+' / '+f3(b.pcBot)],['PILE CAP COVER / SET BY',(b.pcCover==null?'-':shFI(b.pcCover*12))+' / '+(b.pcGov==='pedestal'?'MIN. PED. HT.':'BURIAL')],['PEDESTAL HEIGHT',shFI((b.pedHt||0)*12)]);
     rows.push(['EXPOSURE ABOVE GRADE',shFI((b.exposure||0)*12)]);
     const half=Math.ceil(rows.length/2), rows2=[]; for(let i=0;i<half;i++) rows2.push([...rows[i],...(rows[i+half]||['',''])]);
