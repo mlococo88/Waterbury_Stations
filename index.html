@@ -424,8 +424,9 @@
       </fieldset>
       <fieldset id="fs_foot" style="display:none;">
         <legend>spread footing</legend>
-        <div class="row3">
-          <div><label>Projection past the faces <span class="unit">(ft)</span></label><input type="text" id="s_ftproj" value="1.5" title="The footing extends this far beyond the pier wall and beyond the pedestal, all round."></div>
+        <div class="row4">
+          <div><label>Projection, front and back <span class="unit">(ft)</span></label><input type="text" id="s_ftproj" value="1.5" title="Across the platform: the footing extends this far in front of the pier wall and behind the pedestal. Also used along the track when the side projection is left blank."></div>
+          <div><label>Projection, sides <span class="unit">(ft)</span></label><input type="text" id="s_ftside" value="" placeholder="same" title="Along the track: the footing extends this far past each side face of the pier wall / pedestal. Blank = the same as the front and back projection."></div>
           <div><label>Footing thickness <span class="unit">(ft)</span></label><input type="text" id="s_ftt" value="2"></div>
           <div><label>Bottom below grade <span class="unit">(ft)</span></label><input type="text" id="s_ftbury" value="3.5"></div>
         </div>
@@ -2739,7 +2740,7 @@ function readCfg(){
     masInc: Math.max(0, gn('s_masinc'))/12, masRnd: g('s_masrnd'),
     brgMin: gin('s_sole_in')+gin('s_elast_in')+gin('s_masanchor_in'),
     capD: gf('s_capd'), capT: gf('s_capt')||2.5, capF: gf('s_capf'), capW: gf('s_capw'),
-    pierType: g('s_piertype'), ftProj: gf('s_ftproj'), ftT: gf('s_ftt')||2,
+    pierType: g('s_piertype'), ftProj: gf('s_ftproj'), ftSide: (String(g('s_ftside')||'').trim()===''?gf('s_ftproj'):gf('s_ftside')), ftT: gf('s_ftt')||2,
     ftBury: gf('s_ftbury'), ftFill: Math.max(0,gf('s_ftfill')),
     pile: gb('s_pile'), pileDatum: g('s_piledatum'), pileEmbed: gin('s_pileembed_in'),
     pileDia: gin('s_piledia_in'),
@@ -2886,7 +2887,7 @@ function buildEngine(){
       let a=C.capF, z=C.capF+C.capW;
       if(C.ped){ const po=pedOffAt(s); a=Math.min(a,po-C.pedW/2); z=Math.max(z,po+C.pedW/2); }
       ftA=a-C.ftProj; ftB=z+C.ftProj; ftW=ftB-ftA;
-      ftL=Math.max(C.capT, C.ped?C.pedW:0)+2*C.ftProj;
+      ftL=Math.max(C.capT, C.ped?C.pedW:0)+2*C.ftSide;   // along the track: the side projection
     }
     const botCap = wall ? (ftTop!=null?ftTop:Math.min(capFront,capBack)-C.capD)
                         : Math.min(capFront,capBack)-C.capD;
@@ -4434,7 +4435,7 @@ function sheetsBuild(){
       allP.map(p=>[p.lab,p.lab.startsWith('PP')?'PILE CAP':'CAP',shFI(p.off*12),shFI(p.offCL*12),f3(p.cut),in8(p.dia*12),shFI(C.pileEmbed*12)]),0.065);
     const notes=['* ANCHOR BEAM: MASONRY PLATE FIXED; OTHERS SOLVED FROM THE CROSS SLOPE.', (C.capMode==='level'?'PIER TOP LEVEL; MASONRY PLATES VARY.':'PIER TOP SLOPED WITH THE PLATFORM; PLATES CONSTANT.'),
       'TOP OF PLATFORM AT THE EDGE = TOP OF NEAR RAIL + V ('+shFI(C.V*12)+'); CROSS SLOPE '+C.xs+'%.',
-      b.ftTop!=null?'BOTTOM OF FOOTING = GRADE - '+shFI(C.ftBury*12)+'; FOOTING '+shFI(C.ftProj*12)+' PAST THE WALL AND PEDESTAL FACES; '+shFI(C.ftFill*12)+' GRANULAR FILL BELOW.':'TOP OF MICROPILE = BOTTOM OF CAP + '+shFI(C.pileEmbed*12)+' EMBEDMENT. PILE TIPS, LENGTHS AND CAPACITIES BY THE GEOTECHNICAL DESIGN.',
+      b.ftTop!=null?'BOTTOM OF FOOTING = GRADE - '+shFI(C.ftBury*12)+'; FOOTING '+shFI(C.ftProj*12)+' PAST THE WALL AND PEDESTAL FACES'+(Math.abs(C.ftSide-C.ftProj)>1e-6?' FRONT AND BACK, '+shFI(C.ftSide*12)+' AT THE SIDES':'')+'; '+shFI(C.ftFill*12)+' GRANULAR FILL BELOW.':'TOP OF MICROPILE = BOTTOM OF CAP + '+shFI(C.pileEmbed*12)+' EMBEDMENT. PILE TIPS, LENGTHS AND CAPACITIES BY THE GEOTECHNICAL DESIGN.',
       b.pcTop!=null?'PILE CAP '+shFI(C.pcBury*12)+' MIN. BELOW GRADE TO THE '+(C.pcDatum==='bot'?'BOTTOM':'TOP')+' OF THE CAP, AND DEEP ENOUGH FOR A '+shFI(C.pedHmin*12)+' MIN. PEDESTAL; THE DEEPER GOVERNS.':'',
       C.ped?'PEDESTAL TOP = PIER TOP + '+shFI(C.pedRise*12)+'; GROUT '+shFI(C.grout*12)+', BASE PLATE '+shFI(C.bplate*12)+'.':''].filter(Boolean);
     // notes under the section, wrapped to its width
@@ -6362,7 +6363,7 @@ function buildChecks(){
     if(C.ped && B.length && B[0].ftA!=null){
       const b0=B[0];
       h+=chk('Footing extent', true,
-        `${ftin(b0.ftW)} \u00d7 ${ftin(b0.ftL)}, reaching ${ftin(b0.ftA)} to ${ftin(b0.ftB)} back from the platform edge \u2014 ${ftin(C.ftProj)} past the wall face at ${ftin(C.capF)} and past the pedestal at ${ftin(b0.pedOff+C.pedW/2)}.`);
+        `${ftin(b0.ftW)} \u00d7 ${ftin(b0.ftL)}, reaching ${ftin(b0.ftA)} to ${ftin(b0.ftB)} back from the platform edge \u2014 ${ftin(C.ftProj)} past the wall face at ${ftin(C.capF)} and past the pedestal at ${ftin(b0.pedOff+C.pedW/2)}, and ${ftin(C.ftSide)} past each side.`);
     }
     const shortWall=B.filter(b=>b.wallHt!=null&&b.wallHt<C.ftT);
     if(shortWall.length) h+=chk('Pier wall height', false,
@@ -6619,7 +6620,8 @@ function buildCalcs(){
         `(${n(b.ftB-C.ftProj,4)}-${n(b.ftA+C.ftProj,4)}) + 2(${n(C.ftProj,4)})`, n(b.ftW,4)],
         `spans the pier wall and the pedestal, ${ftin(C.ftProj)} past each face; ${ftin(b.ftA)} to ${ftin(b.ftB)} back from the platform edge`);
       add(tf,'Footing length along track',['L_{f}','\\max(T_{c},W_{ped}) + 2p',
-        `\\max(${n(C.capT,4)},${n(C.ped?C.pedW:0,4)}) + 2(${n(C.ftProj,4)})`, n(b.ftL,4)]);
+        `\\max(${n(C.capT,4)},${n(C.ped?C.pedW:0,4)}) + 2(${n(C.ftSide,4)})`, n(b.ftL,4)],
+        Math.abs(C.ftSide-C.ftProj)>1e-6?`side projection ${ftin(C.ftSide)} (front and back ${ftin(C.ftProj)})`:'');
       add(tf,'Cover over the footing',['c_{f}','Z_{g} - Z_{ft,t}',`${n(b.grade,2)} - ${n(b.ftTop)}`, n(b.grade-b.ftTop,3)]);
       add(tf,'Pier wall height',['h_{w}','Z_{cap} - Z_{ft,t}',`${n(b.capRef)} - ${n(b.ftTop)}`, n(b.wallHt,3)]);
       if(C.ftFill>0) add(tf,'Bottom of excavation',['Z_{exc}','Z_{ft,b} - t_{gf}',`${n(b.ftBot)} - ${n(C.ftFill,4)}`, n(b.ftExcav)],`${ftin(C.ftFill)} of compacted granular fill`);
@@ -7088,7 +7090,7 @@ function applyCantilevers(){
 const KEY='platgeom.autosave.v1', LIBKEY='platgeom.library.v1', DEFKEY='platgeom.default.v1';
 const FIELDS=['sh_proj','sh_no','sh_by','sh_date','sh_chk','sh_cdate','hm_metric','hm_nx','hm_ny','hm_ci','notes_txt','calc_dec','t_stafmt','t_curvedef','p_extmode','t_sta0','t_brg0','t_y0','t_x0','t_gauge','t_profref','p_sta0','p_sta1','p_side','p_H','p_V','p_vdatum',
   'p_xs','p_xsdir','p_W','p_tact','p_mode','p_extra','v_carL','v_truck','v_half','v_floor',
-  's_panel_in','s_capmode','s_sole_in','s_elast_in','s_masanchor_in','s_masanchorsel','s_masfloor_in','s_masinc','s_masrnd','s_capd','s_capt','s_capf','s_capw','s_piertype','s_ftproj','s_ftt','s_ftbury','s_ftfill','s_pedoff','s_peddatum','s_pedw','s_pedrise','s_grout_in','s_bplate_in',
+  's_panel_in','s_capmode','s_sole_in','s_elast_in','s_masanchor_in','s_masanchorsel','s_masfloor_in','s_masinc','s_masrnd','s_capd','s_capt','s_capf','s_capw','s_piertype','s_ftproj','s_ftside','s_ftt','s_ftbury','s_ftfill','s_pedoff','s_peddatum','s_pedw','s_pedrise','s_grout_in','s_bplate_in',
   's_grade0','s_pcw','s_pct','s_pcd','s_pcpile','s_pcbury','s_pcdatum','s_pedhmin','s_colht',
   's_piledatum','s_pileembed_in','s_piledia_in',
   'lim_xs','lim_run','lim_vgap','lim_hgap','lim_vmin','lim_vmax','lim_cant','o_int','o_dec','o_extra','val_in',
@@ -7107,6 +7109,8 @@ function apply(o){
   if(!o) return;
   if(o.ELEMS) ELEMS=o.ELEMS; if(o.VPIS) VPIS=o.VPIS; if(o.SUPERS) SUPERS=o.SUPERS;
   if(o.PVPIS) PVPIS=o.PVPIS; if(o.BEAMS) BEAMS=o.BEAMS; if(o.BENTS) BENTS=o.BENTS; if(o.PILES) PILES=o.PILES; CHAINS=Array.isArray(o.CHAINS)?o.CHAINS:[]; CFOOT=Array.isArray(o.CFOOT)?o.CFOOT:[];
+  // fields added after a file was saved go back to their defaults, not to the previous file's values
+  ['s_ftside'].forEach(id=>{ if(!(o.f&&id in o.f)){ const e=document.getElementById(id); if(e) e.value=''; } });
   Object.entries(o.f||{}).forEach(([id,v])=>{ const e=document.getElementById(id); if(e) e.value=v; });
   Object.entries(o.c||{}).forEach(([id,v])=>{ const e=document.getElementById(id); if(e) e.checked=!!v; });
   setStationFormat(g('t_stafmt'), false);
