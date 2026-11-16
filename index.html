@@ -37,7 +37,7 @@
   .cols { display: grid; grid-template-columns: minmax(0, 430px) minmax(0, 1fr); gap: 26px; align-items: start; }
   #pane-track .cols, #pane-plat .cols, #pane-struct .cols { max-width: 1560px; }
   /* 3D click-for-details panel, inside the app over the 3D view */
-.pop3 { position:fixed; top:64px; right:18px; width:min(780px, 94vw); max-height:calc(100vh - 90px); overflow:auto; z-index:60;
+.pop3 { position:fixed; top:64px; right:18px; width:min(1120px, 96vw); max-height:calc(100vh - 90px); overflow:auto; z-index:60;
         background:var(--paper); border:1px solid var(--ink); box-shadow:0 10px 30px rgba(0,0,0,.25); }
 .pop3[hidden] { display:none; }
 .pop3-head { position:sticky; top:0; display:flex; gap:10px; align-items:center; padding:8px 12px; background:var(--paper); border-bottom:1px solid var(--graphite); z-index:1; }
@@ -3301,6 +3301,8 @@ function drawProfileView(id, opts){
 function drawSection(id, sta, showStruct, bent){
   const svg=document.getElementById(id); if(!svg||!ENG) return;
   const vb=svg.getAttribute('viewBox').split(/\s+/).map(Number), W=vb[2], H=vb[3];
+  // in the 3D details panel the labels are scaled up to a readable size on screen; the label pass below keeps them apart
+  const TSC = id==='svg_pop' ? popTextScale(svg, 8) : 1; svg.dataset.kind='sec';
   const C=ENG.C, R=ENG.rails(sta);
   const eOff=ENG.edgeOff(sta);
   const zEdge=ENG.edgeElev(sta), zBack=ENG.surfElev(sta,C.W);
@@ -3338,10 +3340,10 @@ function drawSection(id, sta, showStruct, bent){
   // pri: 1 dimensions, 2 elevation callouts, 3 leader notes. Lower goes first and
   // claims its space, so a note can never shove a dimension off the drawing.
   const txt=(x,y,t,col,anchor,size,bold,fixed,pri,anch)=>{
-    LBL.push({x,y,t:String(t),col,anchor:anchor||'middle',size:size||8.5,bold:!!bold,
+    LBL.push({x,y,t:String(t),col,anchor:anchor||'middle',size:(size||8.5)*TSC,bold:!!bold,
               fixed:!!fixed,rot:false,pri:pri||2,anch:anch||null});
     return ''; };
-  const rtxt=(x,y,t,col,size)=>{ LBL.push({x,y,t:String(t),col,anchor:'middle',size:size||8,bold:false,fixed:true,rot:true,pri:1,anch:null}); return ''; };
+  const rtxt=(x,y,t,col,size)=>{ LBL.push({x,y,t:String(t),col,anchor:'middle',size:(size||8)*TSC,bold:false,fixed:true,rot:true,pri:1,anch:null}); return ''; };
   function placeLabels(){
     const boxes=[], out=[];
     const esc2=v=>String(v).replace(/&(?!#?\w+;)/g,'&amp;');
@@ -4654,6 +4656,46 @@ function renderSheets(){
    wall, column on a wall pad, column on a spread footing); a click opens this panel with every
    elevation and dimension of that component and its own dimensioned drawing. */
 let OBJ3=[], POP3=null;
+const POP3_TEXT_PX=12;   // smallest label size on screen in the details panel's drawing, px
+// how much to enlarge text of base size fs (drawing units) so it reads at POP3_TEXT_PX on screen
+function popTextScale(svg, fs){ const vb=svg&&svg.viewBox&&svg.viewBox.baseVal, wpx=svg?svg.getBoundingClientRect().width:0;
+  if(!vb||!vb.width||!wpx) return 1; return Math.max(1, POP3_TEXT_PX/(fs*wpx/vb.width)); }
+/* The panel's drawings are made for the full-width tabs, so their labels are small in the panel. Bring every label up
+   to POP3_TEXT_PX on screen, then nudge any horizontal label that now overlaps an earlier one up or down until it is
+   clear (dimension figures and rotated labels stay put and are only avoided). */
+function popFitText(sv){
+  if(!sv) return; const vb=sv.viewBox&&sv.viewBox.baseVal, wpx=sv.getBoundingClientRect().width; if(!vb||!vb.width||!wpx) return;
+  const want=POP3_TEXT_PX/(wpx/vb.width), T=[...sv.querySelectorAll('text')];
+  // the key lines across the top of a wall or column drawing repeat the table above it: left as they are
+  // the key lines across the top of a wall or column drawing: enlarged too, then stacked upward (the frame grows) so they never cover the drawing
+  const head=t=>!t.getAttribute('transform') && (+t.getAttribute('y')||0) <= vb.y+42 && sv.dataset.kind!=='sec';
+  T.forEach(t=>{ const fs=parseFloat(t.getAttribute('font-size'))||0; if(fs>0&&fs<want) t.setAttribute('font-size',want.toFixed(2)); });
+  const placed=[], hit=(a,b)=>a.x<b.x+b.w&&b.x<a.x+a.w&&a.y<b.y+b.h&&b.y<a.y+a.h;
+  const M=sv.getScreenCTM&&sv.getScreenCTM(), Mi=M?M.inverse():null;
+  const box=t=>{ try{ if(!Mi) return null; const r=t.getBoundingClientRect(), P=(x,y)=>{ const q=new DOMPoint(x,y).matrixTransform(Mi); return q; };
+    const a=P(r.left,r.top), c=P(r.right,r.bottom); return {x:Math.min(a.x,c.x)-1,y:Math.min(a.y,c.y)-1,w:Math.abs(c.x-a.x)+2,h:Math.abs(c.y-a.y)+2}; }catch(e){ return null; } };
+  // rotated text and dimension figures claim their space first and never move; the other labels are placed in drawing order
+  const rot=t=>!!t.getAttribute('transform'), isDim=t=>/(^|\s)\d+'-\s?\d|^\d+(\s?\S+)?"$/.test((t.textContent||'').trim());
+  const rank=t=>rot(t)?0:isDim(t)?1:2;
+  const H=T.filter(head).sort((p,q)=>(+q.getAttribute('y')||0)-(+p.getAttribute('y')||0)), hp=[];
+  H.sort((p,q)=>((+q.getAttribute('y')||0)-(+p.getAttribute('y')||0))||((+p.getAttribute('x')||0)-(+q.getAttribute('x')||0)));
+  H.forEach(t=>{ let b=box(t); if(!b) return; const x0=+t.getAttribute('x')||0, y0=+t.getAttribute('y')||0;
+    // same row first: slide right past what it runs into
+    const same=hp.filter(p=>hit(p,b)); if(same.length){ const dx=Math.max(...same.map(p=>p.x+p.w))+6-b.x, c={...b,x:b.x+dx};
+      if(!hp.some(p=>hit(p,c)) && c.x+c.w<vb.x+vb.width){ t.setAttribute('x',(x0+dx).toFixed(1)); b=c; } }
+    let dy=0; while(hp.some(p=>hit(p,{...b,y:b.y+dy})) && dy>-400) dy-=b.h*0.5;
+    if(dy){ t.setAttribute('y',(y0+dy).toFixed(1)); b={...b,y:b.y+dy}; } hp.push(b); placed.push(b); });
+  T.filter(t=>!head(t)).map((t,i)=>({t,i,r:rank(t)})).sort((p,q)=>p.r-q.r||p.i-q.i).forEach(({t,r})=>{ let b=box(t); if(!b) return;
+    if(r===2 && placed.some(p=>hit(p,b))){ const y0=+t.getAttribute('y')||0, step=b.h*0.55; let done=false;
+      for(let i=1;i<=8&&!done;i++) for(const sg of [-1,1]){ const dy=sg*i*step, c={...b,y:b.y+dy};
+        if(c.y<vb.y+2) continue;
+        if(!placed.some(p=>hit(p,c))){ t.setAttribute('y',(y0+dy).toFixed(1)); b=c; done=true; break; } } }
+    placed.push(b); });
+  // grow the frame to take any label that now runs past it
+  if(placed.length){ const x0=Math.min(vb.x,...placed.map(p=>p.x-4)), y0=Math.min(vb.y,...placed.map(p=>p.y-4)),
+      x1=Math.max(vb.x+vb.width,...placed.map(p=>p.x+p.w+4)), y1=Math.max(vb.y+vb.height,...placed.map(p=>p.y+p.h+4));
+    if(x0<vb.x-0.5||y0<vb.y-0.5||x1>vb.x+vb.width+0.5||y1>vb.y+vb.height+0.5) sv.setAttribute('viewBox',[x0,y0,x1-x0,y1-y0].map(v=>v.toFixed(1)).join(' ')); }
+}
 function closePop3(){ const el=document.getElementById('pop3'); if(el) el.hidden=true; POP3=null; if(ENG) draw3D(); }
 document.addEventListener('keydown',e=>{ if(e.key==='Escape' && POP3) closePop3(); });
 function openPop3(o){
@@ -4731,8 +4773,11 @@ function openPop3(o){
   }
   T.innerHTML=title; S.textContent=' '+sub; Bd.innerHTML=h;
   POP3={o, key:JSON.stringify(o)};
-  REDRAW['svg_pop']=draw||(()=>{});
-  try{ if(draw) draw(); }catch(e){ console.error(e); }
+  // the drawings are made for the full-width tabs; in the panel every label is brought up to a readable size on screen
+  el.hidden=false;   // shown before drawing, so the drawing knows its size on screen
+  const drawFit=draw?()=>{ draw(); popFitText(document.getElementById('svg_pop')); }:null;
+  REDRAW['svg_pop']=drawFit||(()=>{});
+  try{ if(drawFit) drawFit(); }catch(e){ console.error(e); }
   G.style.display=go?'':'none'; G.onclick=go||null;
   const GS=document.getElementById('pop3_sheet'), GC=document.getElementById('pop3_calc');
   if(GS) GS.onclick=()=>{ const id=sheetIdFor(o); closePop3(); if(id){ SHT.cur=id; try{ localStorage.setItem(SHT.key,id); }catch(e){} } document.querySelector('.tabbtn[data-tab="sheets"]')?.click(); try{ renderSheets(); }catch(e){} };
@@ -5632,7 +5677,7 @@ function drawWallElev(target){
     Wd.bofFix!=null ? 'footing level' : fi(Wd.frost)+' grade to BOF', 'true scale'];
   s+=`<text x="16" y="22" font-size="11" font-family="monospace" fill="var(--ink)" font-weight="bold">${wl.name}</text>`+
      `<text x="52" y="22" font-size="9" font-family="monospace" fill="var(--ink-soft)">${leg.join('  \u00b7  ')}</text>`;
-  [['var(--oxide)','3 3',stw?'top of platform':'walking surface'],['var(--good)','8 3','grade'],['var(--cyan)','5 3','intersecting wall, in front or behind']].forEach((kk,j)=>{ const xx=16+j*150, yy=40;
+  [['var(--oxide)','3 3',stw?'top of platform':'walking surface'],['var(--good)','8 3','grade'],['var(--cyan)','5 3','intersecting wall, in front or behind']].forEach((kk,j)=>{ const xx=16+j*(TID==='svg_pop'?250:150), yy=40;
     s+=`<line x1="${xx}" y1="${yy-3}" x2="${xx+26}" y2="${yy-3}" stroke="${kk[0]}" stroke-width="1.2" stroke-dasharray="${kk[1]}"/>`+
        `<text x="${xx+32}" y="${yy}" font-size="8.5" font-family="monospace" fill="var(--ink-soft)">${kk[2]}</text>`; });
   svg.innerHTML=svgWrap(TID,s,W,H);
