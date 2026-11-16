@@ -3802,11 +3802,21 @@ function draw3D(){
   // ---- proposed grade ----
   if(gb('v3d_grnd') && gpts.length){
     // carry the ground back far enough to sit under any ramp or stair behind the platform
-    let back=0; if(CHAINS.length) CHAINS.forEach(ch=>{ try{ const R=computeChain(ch);
-      if(R.sta==null) return; const P0=ENG.platPt(R.sta,C.W,0), P1=ENG.platPt(R.sta,C.W+1,0), ux=P1.x-P0.x, uy=P1.y-P0.y;
-      R.foot.forEach(f=>f.p.forEach(q=>{ back=Math.max(back, C.W+(q.x-P0.x)*ux+(q.y-P0.y)*uy); })); }catch(e){} });
+    // ...and along the track past the platform ends, far enough to take any ramp, stair or
+    // spread-footing column beyond them (only when the 3D window reaches that end)
+    let back=0, gA=s0, gB=s1;
+    const reach=(sta,pts)=>{ const P0=ENG.platPt(sta,C.W,0), P1=ENG.platPt(sta,C.W+1,0), ux=P1.x-P0.x, uy=P1.y-P0.y,
+      T1=ENG.platPt(sta+1,C.W,0), tx=T1.x-P0.x, ty=T1.y-P0.y;
+      pts.forEach(q=>{ back=Math.max(back, C.W+(q.x-P0.x)*ux+(q.y-P0.y)*uy);
+        const sq=sta+(q.x-P0.x)*tx+(q.y-P0.y)*ty; if(w0<=0) gA=Math.min(gA,sq-6); if(w1>=1) gB=Math.max(gB,sq+6); }); };
+    if(CHAINS.length) CHAINS.forEach(ch=>{ try{ const R=computeChain(ch);
+      if(R.sta==null) return; R.foot.forEach(f=>reach(R.sta,f.p)); }catch(e){} });
+    (CFOOT||[]).forEach(cf=>{ try{ const sta=parseFloat(cf.sta); if(!isFinite(sta)) return;
+      const off=C.W+(+cf.off||0), hl=(+cf.ftgL||4)/2, hw=(+cf.ftgW||4)/2;
+      reach(sta,[[-hl,-hw],[hl,-hw],[hl,hw],[-hl,hw]].map(([a,b])=>ENG.platPt(sta+a,off+b,0))); }catch(e){} });
     const far=Math.max(C.W, back, C.ped?(ENG.pedOffAt((s0+s1)/2)+Math.max(C.pedW,C.pcW)/2):0)+6;
-    sweep(span(NS), st=>{ const g0=gradeAt(st), near=-(C.gauge/2+8)-ENG.edgeOff(st);
+    const gspan=[]; for(let i=0;i<=NS;i++) gspan.push(gA+(gB-gA)*i/NS);
+    sweep(gspan, st=>{ const g0=gradeAt(st), near=-(C.gauge/2+8)-ENG.edgeOff(st);
       return [{w:near,z:g0},{w:far,z:g0},{w:far,z:g0-0.6},{w:near,z:g0-0.6}]; }, COL3.ground, true, gn('v3d_gop')/100);
     faces.forEach(f=>{ if(f.col===COL3.ground) f.ground=true; });
   }
