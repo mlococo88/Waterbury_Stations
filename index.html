@@ -2918,7 +2918,8 @@ function buildEngine(){
       const capDatum = capAt(C.capF+C.capW);          // cap top at the back face
       out.pedDatum=capDatum;
       out.pedTop=capDatum+C.pedRise;
-      out.colBase=out.pedTop+C.grout+C.bplate;
+      out.colBase=out.pedTop+C.grout+C.bplate;   // top of base plate (where the column starts)
+      out.bobp=out.pedTop+C.grout;                // bottom of base plate: the elevation we report
       out.pedOff=pedOffAt(s); out.pedOffCL=edgeOff(s)+out.pedOff;
       // The pile cap is buried a minimum depth below the proposed grade, so it needs
       // a grade at this pier. Without one there is nothing to measure from.
@@ -3523,7 +3524,7 @@ function drawSection(id, sta, showStruct, bent){
       s+=`<rect x="${(TX(po)-pw*k/2).toFixed(1)}" y="${TY(B.pedTop)}" width="${(pw*k).toFixed(1)}" height="${Math.max(2,TY(pedBot)-TY(B.pedTop))}" fill="rgba(28,26,23,.08)" stroke="var(--ink)" stroke-width="1.2"/>`;
       s+=dimV(TX(po)-pw*k/2-9, B.pedDatum, B.pedTop, ftin(C.pedRise));
       s+=txt(TX(po),TY(B.pedTop)-6,'PEDESTAL '+F(B.pedTop),'var(--ink)','middle',8.5,true);
-      s+=txt(TX(po),TY(B.pedTop)-17,'col base '+F(B.colBase),'var(--cyan)','middle',7.5);
+      s+=txt(TX(po),TY(B.pedTop)-17,'BOTTOM OF BASE PL. '+F(B.bobp),'var(--cyan)','middle',7.5);
 
       if(pcOn){
         s+=`<rect x="${(TX(po)-C.pcW*k/2).toFixed(1)}" y="${TY(B.pcTop)}" width="${(C.pcW*k).toFixed(1)}" height="${Math.max(3,TY(B.pcBot)-TY(B.pcTop)).toFixed(1)}" fill="rgba(28,26,23,.14)" stroke="var(--ink)" stroke-width="1.2"/>`;
@@ -4202,7 +4203,7 @@ function sheetsBuild(){
       D.pline(L.stl,[[x-hc*12,Y(pd.tobp)],[x-hc*12,yt],[x-1.5,yt-2],[x+1.5,yt+2],[x+hc*12,yt],[x+hc*12,Y(pd.tobp)]],false);
       T(L.txt,x,yt+0.12*k,0.075*k,'HSS '+(pd.csz*12).toFixed(0)+'x'+(pd.csz*12).toFixed(0),1);
       D.line(L.el,x,Y(pd.bobp),x,Y(pd.top)-0.3*k);
-      T(L.el,x,Y(pd.top)-0.42*k,0.085*k,'BOBP '+pd.bobp.toFixed(2),1);
+      T(L.el,x,Y(pd.top)-0.42*k,0.085*k,'BOTTOM OF BASE PL. '+pd.bobp.toFixed(2),1);
       T(L.txt,x,Y(pd.top)-0.56*k,0.07*k,(pd.grout*12).toFixed(0)+'" GROUT, '+(pd.bplate*12).toFixed(0)+'" PLATE',1); });
     // top of wall at every end, break and pad, in rows above the wall so none overlap
     const call=[], seen={};
@@ -4254,7 +4255,7 @@ function sheetsBuild(){
     D.line(L.grade,-hw-30,Y(Rc.grade),hw+30,Y(Rc.grade)); D.line(L.cl,0,Y(Rc.bof)-8,0,yt+10);
     T(L.txt,hc+0.06*k,Y(Rc.tobp+stub*0.6),0.08*k,'HSS '+(Rc.hss*12).toFixed(0)+'x'+(Rc.hss*12).toFixed(0));
     const xr=hw+0.35*k; let yp=null;
-    [[Rc.tobp,'TOP OF BASE PLATE '+Rc.tobp.toFixed(2)],[Rc.bobp,'BOBP '+Rc.bobp.toFixed(2)],[Rc.topPed,'TOP OF PEDESTAL '+Rc.topPed.toFixed(2)],[Rc.grade,'GRADE '+Rc.grade.toFixed(2)],[Rc.tof,'TOF '+Rc.tof.toFixed(2)],[Rc.bof,'BOF '+Rc.bof.toFixed(2)]]
+    [[Rc.bobp,'BOTTOM OF BASE PLATE '+Rc.bobp.toFixed(2)],[Rc.topPed,'TOP OF PEDESTAL '+Rc.topPed.toFixed(2)],[Rc.grade,'GRADE '+Rc.grade.toFixed(2)],[Rc.tof,'TOF '+Rc.tof.toFixed(2)],[Rc.bof,'BOF '+Rc.bof.toFixed(2)]]
       .forEach(([z,s])=>{ let y=Y(z); if(yp!=null&&yp-y<0.14*k) y=yp-0.14*k; yp=y; const xs=z>=Rc.topPed-1e-6?hb:z>=Rc.grade-1e-6?hp:hw; D.line(L.el,xs+2,Y(z),xr-0.04*k,y+0.03*k); T(L.el,xr,y,0.085*k,s); });
     const xa=-hw-0.4*k, xb2=-hw-0.8*k, xc=-hw-1.2*k;
     D.dimV(L.dim,Y(Rc.grade),Y(Rc.topPed),xa,-hp);
@@ -4321,12 +4322,12 @@ function sheetsBuild(){
     (R.pads||[]).filter(pd=>pd.ok).forEach((pd,pk)=>{ let ux=pd.pb.x-pd.pa.x, uy=pd.pb.y-pd.pa.y; const m=Math.hypot(ux,uy)||1; ux/=m; uy/=m; const h=Wd.t/2;
       D.pline(L.el,[[pd.pa.x-uy*h,pd.pa.y+ux*h],[pd.pb.x-uy*h,pd.pb.y+ux*h],[pd.pb.x+uy*h,pd.pb.y-ux*h],[pd.pa.x+uy*h,pd.pa.y-ux*h]].map(p=>P2({x:p[0],y:p[1]})),true);
       if(pd.col){ const hc=pd.csz/2, c=P2({x:pd.x,y:pd.y}); D.rect(L.stl,c[0]-hc*12,c[1]-hc*12,c[0]+hc*12,c[1]+hc*12);
-        const lf=pk%2===0; T(L.el,c[0]+(lf?-0.12:0.12)*k,c[1]+0.1*k,0.075*k,pd.name+' PAD '+pd.top.toFixed(2)+', BOBP '+pd.bobp.toFixed(2),lf?2:0); } });
+        const lf=pk%2===0; T(L.el,c[0]+(lf?-0.12:0.12)*k,c[1]+0.1*k,0.075*k,pd.name+' PAD '+pd.top.toFixed(2)+', BOT. BASE PL. '+pd.bobp.toFixed(2),lf?2:0); } });
     // columns on spread footings nearby
     CFOOT.forEach(cf=>{ const Rc=computeCF(cf); if(!Rc.ok) return; const c=P2(Rc.P); if(c[0]<xmin-8*12||c[0]>xmax+8*12) return;
       const sq=(ha,hn)=>[[-1,-1],[1,-1],[1,1],[-1,1]].map(([i,j])=>P2({x:Rc.P.x+Rc.ua.x*ha*i+Rc.un.x*hn*j,y:Rc.P.y+Rc.ua.y*ha*i+Rc.un.y*hn*j}));
       D.pline(L.ftg,sq(Rc.fL/2,Rc.fW/2),true); D.pline(L.conc,sq(Rc.ped/2,Rc.ped/2),true); D.pline(L.stl,sq(Rc.hss/2,Rc.hss/2),true);
-      T(L.el,c[0],c[1]+(Rc.fW/2*12)+0.1*k,0.075*k,cf.name+': TOP PED '+Rc.topPed.toFixed(2)+', BOBP '+Rc.bobp.toFixed(2)+', BOF '+Rc.bof.toFixed(2),1); });
+      T(L.el,c[0],c[1]+(Rc.fW/2*12)+0.1*k,0.075*k,cf.name+': TOP PED '+Rc.topPed.toFixed(2)+', BOT. BASE PL. '+Rc.bobp.toFixed(2)+', BOF '+Rc.bof.toFixed(2),1); });
     // overall dimensions, tie-in and north
     const b=D.bbox(0); const allx=all.map(p=>p[0]), ally=all.map(p=>p[1]);
     const x0=Math.min(...allx)-toe*12, x1=Math.max(...allx)+toe*12, y0=Math.min(...ally)-toe*12, y1=Math.max(...ally)+toe*12;
@@ -4391,7 +4392,7 @@ function sheetsBuild(){
     const gL=Math.min(-eo-C.gauge,b.ftA!=null?b.ftA:wA)-2, gR=Math.max(C.W,b.ftB!=null?b.ftB:wB,C.ped?b.pedOff+Math.max(C.pedW,b.pcTop!=null?C.pcW/2+1:0):0)+2;
     D.line(L.grade,X(gL),Y(b.grade),X(gR),Y(b.grade));
     // elevations on the right, spread so none overlap
-    const xr=X(gR)+(b.pcTop!=null?0.55:0.3)*k, labs=[[b.colBase,'TOP OF BASE PLATE '+f3(b.colBase),C.ped],[C.ped?b.pedTop+C.grout:null,'BOBP '+f3(C.ped?b.pedTop+C.grout:null),C.ped],[b.pedTop,'TOP OF PEDESTAL '+f3(b.pedTop),C.ped],
+    const xr=X(gR)+(b.pcTop!=null?0.55:0.3)*k, labs=[[C.ped?b.bobp:null,'BOTTOM OF BASE PLATE '+f3(C.ped?b.bobp:null),C.ped],[b.pedTop,'TOP OF PEDESTAL '+f3(b.pedTop),C.ped],
       [b.backElev,'TOP OF PLATFORM (BACK) '+f3(b.backElev),true],[b.capBack,(wall?'TOP OF PIER WALL ':'TOP OF CAP ')+f3(b.capBack),true],[b.grade,'GRADE '+f2(b.grade),true],
       [b.botCap,(wall?'BOT. OF WALL / TOP OF FTG ':'BOTTOM OF CAP ')+f3(b.botCap),true],[b.ftBot,'BOTTOM OF FOOTING '+f3(b.ftBot),b.ftBot!=null],[b.ftExcav,'BOT. OF EXCAVATION '+f3(b.ftExcav),b.ftExcav!=null],
       [b.pcTop,'TOP OF PILE CAP '+f3(b.pcTop),b.pcTop!=null],[b.pcBot,'BOTTOM OF PILE CAP '+f3(b.pcBot),b.pcBot!=null],
@@ -4423,7 +4424,7 @@ function sheetsBuild(){
       ['TOP OF PLATFORM EDGE / BACK',f3(b.edgeElev)+' / '+f3(b.backElev)],[(wall?'TOP OF WALL':'TOP OF CAP')+' FRONT / BACK',f3(b.capFront)+' / '+f3(b.capBack)],
       [wall?'BOTTOM OF WALL':'BOTTOM OF CAP',f3(b.botCap)],[wall?'WALL HEIGHT':'CAP DEPTH',shFI((b.capRef-b.botCap)*12)],[wall?'WALL':'CAP',shFI(C.capT*12)+' x '+shFI(C.capW*12)],[(wall?'WALL':'CAP')+' FRONT FROM EDGE',shFI(C.capF*12)]];
     if(b.ftTop!=null) rows.push(['FOOTING',shFI(b.ftL*12)+' x '+shFI(b.ftW*12)+' x '+shFI(C.ftT*12)],['TOP / BOTTOM OF FOOTING',f3(b.ftTop)+' / '+f3(b.ftBot)],['BOTTOM OF EXCAVATION',f3(b.ftExcav)]);
-    if(C.ped) rows.push(['PEDESTAL (CL FROM EDGE)',shFI(C.pedW*12)+' SQ. @ '+shFI(b.pedOff*12)],['TOP / BOTTOM OF PEDESTAL',f3(b.pedTop)+' / '+f3(b.pedBot)],['BOBP / TOP OF BASE PLATE',f3(b.pedTop+C.grout)+' / '+f3(b.colBase)]);
+    if(C.ped) rows.push(['PEDESTAL (CL FROM EDGE)',shFI(C.pedW*12)+' SQ. @ '+shFI(b.pedOff*12)],['TOP / BOTTOM OF PEDESTAL',f3(b.pedTop)+' / '+f3(b.pedBot)],['BOTTOM OF BASE PLATE',f3(b.bobp)]);
     if(b.pcTop!=null) rows.push(['PILE CAP',shFI(C.pcW*12)+' x '+shFI(C.pcT*12)+' x '+shFI(C.pcD*12)],['PILE CAP TOP / BOTTOM',f3(b.pcTop)+' / '+f3(b.pcBot)],['PILE CAP COVER / SET BY',(b.pcCover==null?'-':shFI(b.pcCover*12))+' / '+(b.pcGov==='pedestal'?'MIN. PED. HT.':'BURIAL')],['PEDESTAL HEIGHT',shFI((b.pedHt||0)*12)]);
     rows.push(['EXPOSURE ABOVE GRADE',shFI((b.exposure||0)*12)]);
     const half=Math.ceil(rows.length/2), rows2=[]; for(let i=0;i<half;i++) rows2.push([...rows[i],...(rows[i+half]||['',''])]);
@@ -4602,10 +4603,10 @@ function sheetsBuild(){
     const isW=BS.some(b=>b.wall), pl=!isW&&C.pile, pc=!isW&&BS.some(b=>b.pcTop!=null);
     const cols=[['PIER',0.55],['STATION',1.05],['GRADE',0.65],['T.O. RAIL',0.8],['T.O.P. EDGE',0.85],['T.O.P. BACK',0.85],[isW?'TOP OF WALL':'TOP OF CAP',0.85],[isW?'BOT. OF WALL':'BOT. OF CAP',0.85],
       ...(isW?[['BOF',0.75],['BOT. EXCAV.',0.8]]:[]),...(pl?[['TOP OF PILES',0.85]]:[]),...(pc?[['T.O. PILE CAP',1.0],['B.O. PILE CAP',1.0]]:[]),...(pl&&pc?[['T.O. PED. PILES',1.1]]:[]),
-      ['TOP OF PED.',0.8],['BOBP',0.75],[isW?'WALL HT.':'CAP DEPTH',0.75],['EXPOSURE',0.75],...(BS[0]&&BS[0].rows||[]).map(r=>['MAS. '+r.lab,0.65])];
+      ['TOP OF PED.',0.8],['BOT. BASE PL.',0.95],[isW?'WALL HT.':'CAP DEPTH',0.75],['EXPOSURE',0.75],...(BS[0]&&BS[0].rows||[]).map(r=>['MAS. '+r.lab,0.65])];
     tableK(0,0,1,'PIER SCHEDULE (ELEVATIONS IN FEET)',cols,BS.map(b=>[b.name,formatStation(b.sta),(+b.grade).toFixed(2),f3(b.rails&&b.rails.zNear),f3(b.edgeElev),f3(b.backElev),f3(b.capBack),f3(b.botCap),
       ...(isW?[f3(b.ftBot),f3(b.ftExcav)]:[]),...(pl?[f3(b.pileCut)]:[]),...(pc?[f3(b.pcTop),f3(b.pcBot)]:[]),...(pl&&pc?[f3((b.pedPiles||[])[0]&&b.pedPiles[0].cut)]:[]),
-      C.ped?f3(b.pedTop):'-',C.ped?f3(b.pedTop+C.grout):'-',shFI((b.capRef-b.botCap)*12),shFI((b.exposure||0)*12),...(b.rows||[]).map(r=>in8(r.mas*12))]),0.07);
+      C.ped?f3(b.pedTop):'-',C.ped?f3(b.bobp):'-',shFI((b.capRef-b.botCap)*12),shFI((b.exposure||0)*12),...(b.rows||[]).map(r=>in8(r.mas*12))]),0.07);
   },1);
   // schedules and notes, in paper inches
   sheet('sched','WALL AND COLUMN SCHEDULES, NOTES',k=>{
@@ -4618,9 +4619,9 @@ function sheetsBuild(){
     const wrows=[]; RS.forEach(R=>(R.walls||[]).forEach(wl=>{ const T2=wl.pts.map(q=>q.top), B2=wl.pts.map(q=>q.ftgBot).filter(v=>v!=null), H2=wl.pts.map(q=>q.height).filter(v=>v!=null);
       wrows.push([R.ch.name,wl.name,wl.desc,shFI(wl.len*12),f2(Math.max(...T2)),f2(Math.min(...T2)),B2.length?f2(Math.max(...B2)):'-',B2.length?f2(Math.min(...B2)):'-',H2.length?shFI(Math.max(...H2)*12):'-']); }));
     let y=table(0,0,'WALL SCHEDULE',[['RAMP / STAIR',1.0],['WALL',0.45],['LOCATION',4.2],['LENGTH',0.85],['TOW HIGH',0.8],['TOW LOW',0.8],['BOF HIGH',0.8],['BOF LOW',0.8],['MAX HEIGHT',0.95]],wrows);
-    const crows=[]; RS.forEach(R=>(R.pads||[]).filter(p=>p.ok&&p.col).forEach(p=>crows.push([p.name,'PAD ON '+R.ch.name+' '+p.wall,formatStation(p.sta),shFI(p.off*12),f2(p.top),(p.grout*12).toFixed(0)+'"',f2(p.bobp),(p.bplate*12).toFixed(0)+'"',f2(p.tobp),'-'])));
-    CFs.forEach(r=>crows.push([r.cf.name,'PEDESTAL ON SPREAD FOOTING',formatStation(r.sta),shFI(r.off*12),f2(r.topPed),(r.grout*12).toFixed(0)+'"',f2(r.bobp),(r.bp*12).toFixed(0)+'"',f2(r.tobp),f2(r.bof)]));
-    y=table(0,y-0.45,'COLUMN SCHEDULE (HSS COLUMNS)',[['COLUMN',0.9],['SUPPORT',2.6],['STATION',1.05],['BEHIND BACK',0.95],['TOP OF CONC.',0.95],['GROUT',0.6],['BOBP',0.8],['PLATE',0.6],['TOP OF PL.',0.85],['BOF',0.75]],crows);
+    const crows=[]; RS.forEach(R=>(R.pads||[]).filter(p=>p.ok&&p.col).forEach(p=>crows.push([p.name,'PAD ON '+R.ch.name+' '+p.wall,formatStation(p.sta),shFI(p.off*12),f2(p.top),(p.grout*12).toFixed(0)+'"',f2(p.bobp),(p.bplate*12).toFixed(0)+'"','-'])));
+    CFs.forEach(r=>crows.push([r.cf.name,'PEDESTAL ON SPREAD FOOTING',formatStation(r.sta),shFI(r.off*12),f2(r.topPed),(r.grout*12).toFixed(0)+'"',f2(r.bobp),(r.bp*12).toFixed(0)+'"',f2(r.bof)]));
+    y=table(0,y-0.45,'COLUMN SCHEDULE (HSS COLUMNS)',[['COLUMN',0.9],['SUPPORT',2.6],['STATION',1.05],['BEHIND BACK',0.95],['TOP OF CONC.',0.95],['GROUT',0.6],['BOT. BASE PL.',1.0],['PLATE',0.6],['BOF',0.75]],crows);
     const R0=RS.find(R=>!R.isStair)||RS[0], W0=R0?R0.WALL:{t:14/12,fw:3,ft:1.5,frost:3.5,curb:8/12};
     const notes=['ELEVATIONS ARE IN FEET. TOP OF PLATFORM FROM THE TOP-OF-RAIL PROFILE (PLATFORM GEOMETRY ENGINE); RAMP AND STAIR TOPS ARE READ FROM THE PLATFORM AT THE TIE-IN.',
       'RAMP WALLS '+shFI(W0.t*12)+' THICK; TOP OF WALL '+Math.round(W0.curb*12)+'" ABOVE THE ADJACENT WALKING SURFACE EXCEPT AT COLUMN PADS, WHICH ARE LEVEL.',
@@ -4628,7 +4629,7 @@ function sheetsBuild(){
       'BOTTOM OF FOOTING AT LEAST '+shFI(W0.frost*12)+' BELOW THE LOW GRADE (FROST). LOW GRADE AS ENTERED, ELSE THE LOWEST GRADE ENTERED AT THE ADJACENT PIERS.',
       'GRADE UNDER RAMP WALLS IS TAKEN AS A STRAIGHT LINE FROM THE TOP OF THE RAMP TO THE BOTTOM ALONG THE WALKING PATH. VERIFY AGAINST THE GRADING PLAN.',
       'STAIR SUPPORT WALL TOP = TOP OF PLATFORM LESS THE FRP / BEARING STACK AT THE COLUMN.',
-      'COLUMNS HSS 8x8 ON A BASE PLATE AND GROUT PAD AS SCHEDULED; BOBP = TOP OF CONCRETE + GROUT.',
+      'COLUMNS HSS 8x8 ON A BASE PLATE AND GROUT PAD AS SCHEDULED; ELEVATIONS GIVEN ARE BOTTOM OF BASE PLATE = TOP OF CONCRETE + GROUT.',
       'COLUMN FOUNDATIONS: TOP OF PEDESTAL = GRADE + REVEAL; BOTTOM OF FOOTING = GRADE - FROST DEPTH UNLESS NOTED.',
       'GENERATED BY THE PLATFORM GEOMETRY ENGINE FROM THE MODEL AS ENTERED; CHECK AGAINST THE CONTRACT DRAWINGS.'];
     y-=0.5; T(L.txt,0,y,0.12,'GENERAL NOTES'); y-=0.22;
@@ -4733,7 +4734,7 @@ function openPop3(o){
       [b.wall?'Bottom of pier wall':'Bottom of cap',f3(b.botCap)],[b.wall?'Pier wall height':'',b.wall?ftin(b.wallHt):''],
       ['Top of footing',b.ftTop!=null?f3(b.ftTop):''],['Bottom of footing',b.ftBot!=null?f3(b.ftBot):''],['Footing',b.ftW?ftin(b.ftW)+' × '+ftin(b.ftL):''],
       ['Bottom of excavation',b.ftExcav!=null?f3(b.ftExcav):''],
-      ['Top of pedestal',C.ped?f3(b.pedTop):''],['Bottom of pedestal',C.ped&&b.pedBot!=null?f3(b.pedBot):''],['Column base (bottom of base plate)',C.ped?f3(b.colBase):''],
+      ['Top of pedestal',C.ped?f3(b.pedTop):''],['Bottom of pedestal',C.ped&&b.pedBot!=null?f3(b.pedBot):''],['Bottom of base plate',C.ped?f3(b.bobp):''],
       ['Top of pile cap',b.pcTop!=null?f3(b.pcTop):''],['Bottom of pile cap',b.pcBot!=null?f3(b.pcBot):''],
       ['Grade',f2(b.grade)+(b.gradeOwn?'':' (default)')],['Exposure above grade',b.exposure!=null?ftin(b.exposure):'']]);
     if(b.rows&&b.rows.length) h+=`<h2 class="sec mt">Beam seats</h2>`+tbl(b.rows.map(r=>[esc(r.lab)+(r.anchor?' (anchor)':''),ftin(r.off)+' from edge',f3(r.zP),f3(r.topB),f3(r.botB),
@@ -4775,7 +4776,7 @@ function openPop3(o){
       const pd=(R.pads||[]).find(x=>x.name===o.pn); if(!pd) return;
       title='Column '+esc(pd.name); sub='on '+pd.wall+' of '+esc(ch.name);
       h+=kv([['Station',formatStation(pd.sta)],['Behind back edge',ftin(pd.off)],['Northing / Easting',pd.y.toFixed(3)+' / '+pd.x.toFixed(3)],['Column','HSS '+(pd.csz*12).toFixed(0)+'×'+(pd.csz*12).toFixed(0)],
-        ['Top of pad (concrete)',f3(pd.top)],['Pad length',ftin(pd.len)],['Grout',(pd.grout*12).toFixed(2)+'"'],['Bottom of base plate',f3(pd.bobp)],['Base plate',(pd.bplate*12).toFixed(2)+'"'],['Top of base plate',f3(pd.tobp)]]);
+        ['Top of pad (concrete)',f3(pd.top)],['Pad length',ftin(pd.len)],['Grout',(pd.grout*12).toFixed(2)+'"'],['Bottom of base plate',f3(pd.bobp)],['Base plate',(pd.bplate*12).toFixed(2)+'"']]);
       const wi=R.walls.findIndex(w=>w.name===pd.wall);
       h+=svgBox('0 0 1500 560'); draw=()=>{ CHAIN_SEL=o.ci; WALL_SEL=Math.max(0,wi); drawWallElev('svg_pop'); };
     }
@@ -4784,7 +4785,7 @@ function openPop3(o){
     const cf=CFOOT[o.i]; if(!cf) return; const Rc=computeCF(cf);
     title='Column '+esc(cf.name); sub='on a spread footing · '+formatStation(Rc.sta);
     h+=kv([['Station',formatStation(Rc.sta)],['Behind back edge',ftin(Rc.off)],['Northing / Easting',Rc.P.y.toFixed(3)+' / '+Rc.P.x.toFixed(3)],['Column','HSS '+(Rc.hss*12).toFixed(0)+'×'+(Rc.hss*12).toFixed(0)],
-      ['Grade',f2(Rc.grade)+' ('+esc(Rc.gsrc)+')'],['Top of pedestal',f3(Rc.topPed)],['Bottom of base plate',f3(Rc.bobp)],['Top of base plate',f3(Rc.tobp)],['Top of footing',f3(Rc.tof)],['Bottom of footing',f3(Rc.bof)],
+      ['Grade',f2(Rc.grade)+' ('+esc(Rc.gsrc)+')'],['Top of pedestal',f3(Rc.topPed)],['Bottom of base plate',f3(Rc.bobp)],['Top of footing',f3(Rc.tof)],['Bottom of footing',f3(Rc.bof)],
       ['Pedestal',ftin(Rc.ped)+' square × '+ftin(Rc.pedH)+' high'],['Footing',ftin(Rc.fL)+' × '+ftin(Rc.fW)+' × '+ftin(Rc.fT)],['Cover over footing',ftin(Rc.cover)],['Checks',Rc.checks.length?Rc.checks.join('; '):'OK']]);
     h+=svgBox('0 0 1500 560'); draw=()=>{ CF_SEL=o.i; drawCFElev('svg_pop'); };
     go=()=>{ CF_SEL=o.i; closePop3(); document.querySelector('.tabbtn[data-tab="chains"]')?.click(); refreshAll(); };
@@ -5290,7 +5291,7 @@ function renderChainUI(){
       <div><label>Entry walls start under the platform <span class="unit">(ft)</span></label><input type="text" value="${c.wallsUnder==null?'':c.wallsUnder}" placeholder="0" onchange="chainSet(${i},'wallsUnder',this.value===''?'':parseFeetInches(this.value))" title="For a landing straight back from the platform: how far the side walls run in front of the back edge, under the platform."></div>
       <div></div></div>`}
     <div style="margin-top:8px;"><label>Columns on the walls &mdash; level pads</label>
-    <div class="scroll"><table class="subtbl"><tr><th class="lbl">Column</th><th>Station</th><th>Behind back edge (ft)</th><th>Pad length (ft)</th><th>Pad elev</th><th>or below platform (ft)</th><th>Top of pad</th><th>Column</th><th>BOBP</th><th></th></tr>
+    <div class="scroll"><table class="subtbl"><tr><th class="lbl">Column</th><th>Station</th><th>Behind back edge (ft)</th><th>Pad length (ft)</th><th>Pad elev</th><th>or below platform (ft)</th><th>Top of pad</th><th>Column</th><th>Bottom of base plate</th><th></th></tr>
     ${(c.pads||[]).map((pd,k)=>{ const po=(R.pads||[])[k]||{};
       const inp=(key,w)=>`<input type="text" style="width:${w}px" value="${esc(pd[key]==null?'':pd[key])}" onchange="padSet(${i},${k},'${key}',this.value)">`;
       return `<tr><td class="lbl">${inp('name',52)}</td><td><input type="text" style="width:90px" value="${pd.sta===''||pd.sta==null?'':formatStation(+pd.sta)}" onchange="padSet(${i},${k},'sta',parseStation(this.value))"></td>
@@ -5468,7 +5469,7 @@ function drawChainPlan(){
         s+=`<path d="M${poly(box)} Z" fill="rgba(184,58,40,.28)" stroke="var(--oxide)" stroke-width="1.2"/>`; }
       // the column on it
       s+=`<rect x="${(TX(c.x)-hs*k).toFixed(1)}" y="${(TY(c.y)-hs*k).toFixed(1)}" width="${(2*hs*k).toFixed(1)}" height="${(2*hs*k).toFixed(1)}" fill="var(--paper)" stroke="var(--ink)" stroke-width="1"/>`+
-         `<text x="${(lf?TX(c.x)-hs*k-3:TX(c.x)+hs*k+3).toFixed(1)}" y="${(TY(c.y)-hs*k-3).toFixed(1)}" text-anchor="${lf?'end':'start'}" font-size="8.5" font-family="monospace" fill="var(--oxide)" paint-order="stroke" stroke="var(--paper)" stroke-width="2.4">${esc(pd.name)} pad ${pd.top.toFixed(2)} \u00b7 ${ftin(pd.len)}${pd.col?' \u00b7 BOBP '+pd.bobp.toFixed(2):''}</text>`; });
+         `<text x="${(lf?TX(c.x)-hs*k-3:TX(c.x)+hs*k+3).toFixed(1)}" y="${(TY(c.y)-hs*k-3).toFixed(1)}" text-anchor="${lf?'end':'start'}" font-size="8.5" font-family="monospace" fill="var(--oxide)" paint-order="stroke" stroke="var(--paper)" stroke-width="2.4">${esc(pd.name)} pad ${pd.top.toFixed(2)} \u00b7 ${ftin(pd.len)}${pd.col?' \u00b7 BOT. BASE PL. '+pd.bobp.toFixed(2):''}</text>`; });
     // walking line with direction arrows
     const P=Q.path.map(p=>RT(p));
     if(sel){
@@ -5492,7 +5493,7 @@ function drawChainPlan(){
     s+=`<path d="M${poly(sq(Rc.fL/2,Rc.fW/2))} Z" fill="rgba(28,26,23,.06)" stroke="var(--graphite)" stroke-width="0.9" stroke-dasharray="4 3"/>`;
     s+=`<path d="M${poly(sq(Rc.ped/2,Rc.ped/2))} Z" fill="rgba(28,26,23,.18)" stroke="var(--ink)" stroke-width="1"/>`;
     s+=`<path d="M${poly(sq(Rc.hss/2,Rc.hss/2))} Z" fill="var(--paper)" stroke="var(--ink)" stroke-width="1"/>`;
-    s+=`<text x="${(TX(c0.x)).toFixed(1)}" y="${(TY(c0.y)-Rc.fW/2*k-4).toFixed(1)}" text-anchor="middle" font-size="8.5" font-family="monospace" fill="var(--ink)" paint-order="stroke" stroke="var(--paper)" stroke-width="2.4">${esc(cf.name)} BOBP ${Rc.bobp.toFixed(2)}</text>`;
+    s+=`<text x="${(TX(c0.x)).toFixed(1)}" y="${(TY(c0.y)-Rc.fW/2*k-4).toFixed(1)}" text-anchor="middle" font-size="8.5" font-family="monospace" fill="var(--ink)" paint-order="stroke" stroke="var(--paper)" stroke-width="2.4">${esc(cf.name)} BOT. BASE PL. ${Rc.bobp.toFixed(2)}</text>`;
   });
   s+=northArrow(W-36,40,a.brg-Math.PI/2,22)+scaleBar(pad,H-14,k);
   s+=`<text x="${W-pad}" y="${H-12}" font-size="8.5" font-family="monospace" fill="var(--ink-soft)" text-anchor="end">up-station →</text>`;
@@ -5610,7 +5611,7 @@ function drawWallElev(target){
     s+=txt(cb+6,TY(pd.tobp+stub*0.55),'HSS '+(pd.csz*12).toFixed(0)+'\u00d7'+(pd.csz*12).toFixed(0),{fs:8,a:'start',c:'var(--ink-soft)'});
     // BOBP called out on the wall face just below the pad, clear of the top-of-wall labels
     s+=`<line x1="${F((xa+xb)/2)}" y1="${F(TY(pd.bobp))}" x2="${F((xa+xb)/2)}" y2="${F(TY(pd.top)+10)}" stroke="var(--oxide)" stroke-width="0.6"/>`;
-    s+=txt((xa+xb)/2,TY(pd.top)+20,'BOBP '+pd.bobp.toFixed(2),{fs:8.5,b:true,c:'var(--oxide)'});
+    s+=txt((xa+xb)/2,TY(pd.top)+20,'BOTTOM OF BASE PL. '+pd.bobp.toFixed(2),{fs:8.5,b:true,c:'var(--oxide)'});
     s+=txt((xa+xb)/2,TY(pd.top)+31,(pd.grout*12).toFixed(0)+'" grout \u00b7 '+(pd.bplate*12).toFixed(2).replace(/\.?0+$/,'')+'" plate',{fs:7.5,c:'var(--ink-soft)'});
   });
 
@@ -5717,9 +5718,9 @@ function renderWallTable(){
   h+='</table>';
   const cols=(R.pads||[]).filter(pd=>pd.ok&&pd.col);
   if(cols.length){
-    h+=`<h2 class="sec mt">Columns on the walls</h2><table class="wide"><tr><th class="lbl">Column</th><th>Station</th><th>Behind back edge</th><th>Northing</th><th>Easting</th><th class="lbl">On wall</th><th>Top of pad (concrete)</th><th>Grout</th><th>Bottom of base plate</th><th>Base plate</th><th>Top of base plate</th><th>Pad length</th></tr>`;
+    h+=`<h2 class="sec mt">Columns on the walls</h2><table class="wide"><tr><th class="lbl">Column</th><th>Station</th><th>Behind back edge</th><th>Northing</th><th>Easting</th><th class="lbl">On wall</th><th>Top of pad (concrete)</th><th>Grout</th><th>Bottom of base plate</th><th>Base plate</th><th>Pad length</th></tr>`;
     cols.forEach(c=>{ h+=`<tr><td class="lbl"><strong>${esc(c.name)}</strong></td><td>${formatStation(c.sta)}</td><td>${ftin(c.off)}</td><td>${c.y.toFixed(3)}</td><td>${c.x.toFixed(3)}</td><td class="lbl">${c.wall}</td>`+
-      `<td>${c.top.toFixed(3)}</td><td>${(c.grout*12).toFixed(2)}"</td><td><strong>${c.bobp.toFixed(3)}</strong></td><td>${(c.bplate*12).toFixed(2)}"</td><td>${c.tobp.toFixed(3)}</td><td>${ftin(c.len)}</td></tr>`; });
+      `<td>${c.top.toFixed(3)}</td><td>${(c.grout*12).toFixed(2)}"</td><td><strong>${c.bobp.toFixed(3)}</strong></td><td>${(c.bplate*12).toFixed(2)}"</td><td>${ftin(c.len)}</td></tr>`; });
     h+=`</table><p class="note">HSS ${(cols[0].csz*12).toFixed(0)}\u00d7${(cols[0].csz*12).toFixed(0)} columns. Bottom of base plate = top of pad + grout.</p>`;
   }
   const wl=R.walls[Math.min(WALL_SEL,R.walls.length-1)];
@@ -5786,11 +5787,11 @@ function renderCF(){
   // output table
   if(!CFOOT.length){ tb.innerHTML=''; drawCFElev(); return; }
   const f=v=>v==null?'—':v.toFixed(3);
-  let t=`<table class="wide"><tr><th class="lbl">Column</th><th>Station</th><th>Behind back edge</th><th>Northing</th><th>Easting</th><th>Grade</th><th>Top of pedestal</th><th>Bottom of base plate</th><th>Top of base plate</th><th>Top of footing</th><th>Bottom of footing</th><th>Pedestal height</th><th>Cover over footing</th><th class="lbl">Grade from</th><th class="lbl">Checks</th></tr>`;
+  let t=`<table class="wide"><tr><th class="lbl">Column</th><th>Station</th><th>Behind back edge</th><th>Northing</th><th>Easting</th><th>Grade</th><th>Top of pedestal</th><th>Bottom of base plate</th><th>Top of footing</th><th>Bottom of footing</th><th>Pedestal height</th><th>Cover over footing</th><th class="lbl">Grade from</th><th class="lbl">Checks</th></tr>`;
   CFOOT.forEach((cf,i)=>{ const R=computeCF(cf);
     if(!R.ok){ t+=`<tr><td class="lbl">${esc(cf.name)}</td><td colspan="14" class="lbl bad">no grade</td></tr>`; return; }
     t+=`<tr><td class="lbl"><a href="#" onclick="cfPick(${i});return false;"><strong>${esc(cf.name)}</strong></a></td><td>${formatStation(R.sta)}</td><td>${ftin(R.off)}</td><td>${R.P.y.toFixed(3)}</td><td>${R.P.x.toFixed(3)}</td>`+
-       `<td>${R.grade.toFixed(2)}</td><td>${f(R.topPed)}</td><td><strong>${f(R.bobp)}</strong></td><td>${f(R.tobp)}</td><td>${f(R.tof)}</td><td><strong>${f(R.bof)}</strong></td>`+
+       `<td>${R.grade.toFixed(2)}</td><td>${f(R.topPed)}</td><td><strong>${f(R.bobp)}</strong></td><td>${f(R.tof)}</td><td><strong>${f(R.bof)}</strong></td>`+
        `<td>${ftin(R.pedH)}</td><td>${ftin(R.cover)}</td><td class="lbl note">${esc(R.gsrc)}</td><td class="lbl ${R.checks.length?'bad':'good'}">${R.checks.length?R.checks.join('; '):'OK'}</td></tr>`; });
   t+='</table><p class="note">Coordinates are the column centre. Footing length runs along the track.</p>';
   tb.innerHTML=t;
@@ -5832,7 +5833,7 @@ function drawCFElev(target){
   s+=`<line x1="${F(EX(0))}" y1="${F(EY(R.tobp+stub+0.4))}" x2="${F(EX(0))}" y2="${F(EY(R.bof)+14)}" stroke="var(--ink-soft)" stroke-width="0.5" stroke-dasharray="10 3 2 3"/>`;
   // elevations on the right
   const xr0=EX(hw)+10, xrL=EX(hw)+150;
-  [[R.tobp,'TOP OF BASE PLATE '+R.tobp.toFixed(2),'var(--ink-soft)',false],[R.bobp,'BOBP '+R.bobp.toFixed(2),'var(--oxide)',true],[R.topPed,'TOP OF PEDESTAL '+R.topPed.toFixed(2),'var(--ink)',true],
+  [[R.bobp,'BOTTOM OF BASE PLATE '+R.bobp.toFixed(2),'var(--oxide)',true],[R.topPed,'TOP OF PEDESTAL '+R.topPed.toFixed(2),'var(--ink)',true],
    [R.grade,'GRADE '+R.grade.toFixed(2),'var(--good)',false],[R.tof,'TOF '+R.tof.toFixed(2),'var(--ink)',false],[R.bof,'BOF '+R.bof.toFixed(2),'var(--ink)',true]]
    .forEach(([z,l,c,b],j,arr)=>{ // keep labels from colliding
      let y=EY(z)+3; if(j>0){ const yp=arr[j-1]._y; if(y-yp<12) y=yp+12; } arr[j]._y=y;
@@ -6214,7 +6215,7 @@ function buildSupportTables(){
   BEAMS.forEach(bm=>{ head.push(bm.lab+' plate (in)'+(bm.lab===anchorLab?' \u2605':''));
                       if(inc0) head.push(bm.lab+' detailed (in)'); });
   if(C.pile&&!wall) head.push('Top of pile','Pile embedment (in)');
-  if(C.ped) head.push('Ped offset from \u2104','Cap datum','Ped top','Col base','Pedestal height');
+  if(C.ped) head.push('Ped offset from \u2104','Cap datum','Ped top','Bottom of base plate','Pedestal height');
   if(C.ped&&!wall) head.push('Pile cap top','Pile cap bot','Cover to pile cap','Pile cap set by');
   head.push('Ground','Cap above ground');
   const rows=B.map(b=>{
@@ -6224,7 +6225,7 @@ function buildSupportTables(){
                     b.ftBot==null?'\u2014':F(b.ftBot,d), b.ftExcav==null?'\u2014':F(b.ftExcav,d));
     b.rows.forEach(rw=>{ r.push((rw.mas*12).toFixed(3)); if(inc0) r.push((rw.masRnd*12).toFixed(4)); });
     if(C.pile&&!wall) r.push(F(b.pileCut,d), (C.pileEmbed*12).toFixed(2));
-    if(C.ped) r.push(F(b.pedOffCL,3), F(b.pedDatum,d), F(b.pedTop,d), F(b.colBase,d),
+    if(C.ped) r.push(F(b.pedOffCL,3), F(b.pedDatum,d), F(b.pedTop,d), F(b.bobp,d),
                      b.pedHt==null?'\u2014':F(b.pedHt,3));
     if(C.ped&&!wall) r.push(b.pcTop==null?'\u2014':F(b.pcTop,d), b.pcBot==null?'\u2014':F(b.pcBot,d),
                      b.pcCover==null?'\u2014':F(b.pcCover,2), b.pcGov||'\u2014');
@@ -6653,8 +6654,10 @@ function buildCalcs(){
     add(t7,'Offset from the track',['o_{ped}','H_{tot} + w_{ped}',`${n(ENG.edgeOff(s),4)} + ${n(b.pedOff,4)}`, n(b.pedOffCL,4)]);
     add(t7,'Cap top at the back face',['Z_{cap,b}', n(b.pedDatum)],'the pedestal is measured from the cap it shares a foundation with');
     add(t7,'Top of pedestal',['Z_{ped}','Z_{cap,b} + h_{r}',`${n(b.pedDatum)} + ${n(C.pedRise,4)}`, n(b.pedTop)],`rise ${ftin(C.pedRise)} above the cap`);
-    add(t7,'Column base',['Z_{base}','Z_{ped} + t_{g} + t_{bp}',`${n(b.pedTop)} + ${n(C.grout,4)} + ${n(C.bplate,4)}`, n(b.colBase)],
-      `grout pad ${(C.grout*12).toFixed(2)} in, base plate ${(C.bplate*12).toFixed(2)} in`);
+    add(t7,'Bottom of base plate',['Z_{bobp}','Z_{ped} + t_{g}',`${n(b.pedTop)} + ${n(C.grout,4)}`, n(b.bobp)],
+      `grout pad ${(C.grout*12).toFixed(2)} in; the elevation reported on the drawings and schedules`);
+    add(t7,'Top of base plate (column base)',['Z_{base}','Z_{bobp} + t_{bp}',`${n(b.bobp)} + ${n(C.bplate,4)}`, n(b.colBase)],
+      `base plate ${(C.bplate*12).toFixed(2)} in`);
 
     if(b.wall){
       const t8=S('8 \u00b7 Pedestal support');
